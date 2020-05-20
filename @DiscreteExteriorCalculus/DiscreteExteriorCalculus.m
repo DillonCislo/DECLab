@@ -371,7 +371,11 @@ classdef DiscreteExteriorCalculus < handle
             validateattributes( U, {'numeric'}, ...
                 {'2d', 'finite', 'real', 'nonnan'} );
             
-            if ~isvector(U)
+            if size(U, 1) == size(this.V, 1)
+                
+                inputType = '0form';
+            
+            elseif ~isvector(U)
                 
                 % If the input field is a tangent dual vector field we must
                 % convert it into a primal 1-form
