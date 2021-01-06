@@ -81,6 +81,43 @@ fN = fN ./ ( 2 .* fA );
 % Construct Flat/Sharp Operators
 %==========================================================================
 
+% Construct flatPP --------------------------------------------------------
+% The 'flatPP' operator maps primal discrete vector fields (tangent vectors
+% living on primal vertices) to primal 1-forms living on primal edges. In
+% order to work as a single linear operator vector fields should be
+% represented as a single (3#V)x1 column vector: [Vx; Vy; Vz]
+
+% The 'flatDP' operator can be constructed as the composition of two
+% separate operators. The first operator constructs a tangent vector on
+% each primal edge by averaging the primal vectors living on the vertices
+% defining that edge. The operator is of size (3#E)x(3#V) with 2 non-zero
+% elements per row
+
+I = repmat( (1:(3*numE)).', 2, 1 );
+
+J = [ E(:,1); E(:,1)+numV; E(:,1)+(2*numV) ];
+J = [ J; E(:,2); E(:,2)+numV; E(:,2)+(2*numV) ];
+
+Q = ones(size(I)) ./ 2;
+
+PP1 = sparse( I, J, Q, 3*numE, 3*numV );
+
+% The second operator calculates the dot product between the tangent
+% vectors living on primal edges and the directed edge vector itself,
+% producing a single scalar per primal edge. The size of the operator is
+% (#E)x(3#E) with 3 non-zero elements per row
+
+I = repmat( (1:numE).', 3, 1 );
+
+J = (1:numE).';
+J = [ J; J+numE; J+(2*numE) ];
+
+Q = [ Eij(:,1); Eij(:,2); Eij(:,3) ];
+
+PP2 = sparse(I, J, Q, numE, 3*numE );
+
+this.flatPP = PP2 * PP1;
+
 % Construct flatDP --------------------------------------------------------
 % The 'flatDP' operator maps dual discrete vector fields (tangent
 % vectors living on dual vertices) to primal 1-forms living on primal
