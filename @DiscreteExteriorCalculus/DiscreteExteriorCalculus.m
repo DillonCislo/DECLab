@@ -58,6 +58,11 @@ classdef DiscreteExteriorCalculus < handle
         
     end
     
+    %======================================================================
+    %======================================================================
+    %                       METHODS
+    %======================================================================
+    %======================================================================
     methods (Access = public)
         
         function this = DiscreteExteriorCalculus(F, V)
@@ -329,8 +334,12 @@ classdef DiscreteExteriorCalculus < handle
             if isVector
                 
                 divU = this.primal1FormToDualVector(divU);
-                rotU = this.primal1FormToDualVector(rotU);
-                
+                try
+                    rotU = this.primal1FormToDualVector(rotU);
+                catch
+                    debugMsg(1, 'Cannot compute rotU, setting to NaN \n')
+                    rotU = NaN * ones(size(divU)) ;
+                end
                 harmU = UVec - divU - rotU;
                 
             else
@@ -354,7 +363,7 @@ classdef DiscreteExteriorCalculus < handle
             %       - normalizeAreas:   A boolean. If true the Laplacian
             %       operator will be normalized by the area of dual
             %       2-simplices (i.e. scalar Laplacian output is a primal
-            %       0-form).  If false, the Laplcian operator will NOT be
+            %       0-form).  If false, the Laplacian operator will NOT be
             %       normalized by these areas (i.e. scalar Laplacian output
             %       is a dual 2-form).  For reference, the latter
             %       formalism corresponds exactly to the classical FEM
