@@ -48,6 +48,10 @@ classdef DiscreteExteriorCalculus < handle
         % #Fx#F  Hodge dual operator mapping primal 2-forms to dual 0-forms
         hd2
         
+        % #Ex(3#V) Flat operator mapping primal vector fields to primal
+        % 1-forms
+        flatPP
+        
         % #Ex(3#F) Flat operator mapping dual vector fields to primal
         % 1-forms
         flatDP
@@ -94,6 +98,30 @@ classdef DiscreteExteriorCalculus < handle
             
             % Construct DEC Operators -------------------------------------
             this.constructDECOperators();
+            
+        end
+        
+        function UFlat = primalVectorToPrimal1Form(this, U)
+            %PRIMALVECTORTOPRIMAL1FORM Transforms the tangent part of a
+            %vector field living on triangulation vertices (primal
+            %vertices) into a primal 1-form field. An implementation of a
+            %'discrete flat' operator. Vertex normals are estimated using
+            %built-in MATLAB face area weighting. This method assumes that
+            %the face connectivity list is consistently ordered to produce
+            %consistent vertex normals
+            
+            % Input Processing --------------------------------------------
+            validateattributes( U, {'numeric'}, ...
+                {'2d', 'finite', 'nonnan', 'real', ...
+                'ncols', size(this.V, 2), 'nrows', size(this.V, 1)} );
+            
+            % Project the vector field onto the tangent space
+            % of its respective vertex ------------------------------------
+            VN = vertexNormal(triangulation(this.F, this.V));
+            U = U - repmat(dot(U, VN, 2), 1, 3) .* VN;
+            
+            % Apply flat operator to construct primal 1-form --------------
+            UFlat = this.flatPP * U(:);
             
         end
         
@@ -186,6 +214,7 @@ classdef DiscreteExteriorCalculus < handle
             %   INPUT PARAMETERS:
             %
             %       - U:    #FxD dual vector field OR
+            %               #VxD primal vector field OR
             %               #Ex1 primal 1-form
             %
             %   OUTPUT PARAMETERS
@@ -200,11 +229,16 @@ classdef DiscreteExteriorCalculus < handle
                 
                 % If the input field is a tangent dual vector field we must
                 % convert it into a primal 1-form
-                assert( (size(U, 1) == size(this.F, 1)) &&...
-                    (size(U, 2) == size(this.V, 2)), ...
-                    'Input dual vector field is improperly sized!');
+                assert(size(U, 2) == size(this.V, 2), ...
+                    'Input vector field has incorrect dimensions!');
                 
-                U = this.dualVectorToPrimal1Form(U);
+                if (size(U, 1) == size(this.F, 1))
+                    U = this.dualVectorToPrimal1Form(U);
+                elseif (size(U, 1) == size(this.V, 1))
+                    U = this.primalVectorToPrimal1Form(U);
+                else
+                    error('Input vector field is improperly sized!');
+                end
                 
             else
                 
@@ -227,6 +261,7 @@ classdef DiscreteExteriorCalculus < handle
             %   INPUT PARAMETERS:
             %
             %       - U:    #FxD dual vector field OR
+            %               #VxD primal vector field OR
             %               #Ex1 primal 1-form
             %
             %   OUTPUT PARAMETERS
@@ -241,11 +276,16 @@ classdef DiscreteExteriorCalculus < handle
                 
                 % If the input field is a tangent dual vector field we must
                 % convert it into a primal 1-form
-                assert( (size(U, 1) == size(this.F, 1)) &&...
-                    (size(U, 2) == size(this.V, 2)), ...
-                    'Input dual vector field is improperly sized!');
+                assert(size(U, 2) == size(this.V, 2), ...
+                    'Input vector field has incorrect dimensions!');
                 
-                U = this.dualVectorToPrimal1Form(U);
+                if (size(U, 1) == size(this.F, 1))
+                    U = this.dualVectorToPrimal1Form(U);
+                elseif (size(U, 1) == size(this.V, 1))
+                    U = this.primalVectorToPrimal1Form(U);
+                else
+                    error('Input vector field is improperly sized!');
+                end
                 
             else
                 
@@ -357,6 +397,7 @@ classdef DiscreteExteriorCalculus < handle
             %   INPUT PARAMETERS:
             %
             %       - U:        #Vx1 primal 0-form OR
+            %                   #Vx3 primal tangent vector field OR
             %                   #Fx3 dual tangent vector field OR
             %                   #Ex1 primal 1-form
             %
@@ -376,7 +417,7 @@ classdef DiscreteExteriorCalculus < handle
             %
             %       - lapU:     The Laplacian of the input field
             
-             % Input Processing --------------------------------------------
+            % Input Processing --------------------------------------------
             validateattributes( U, {'numeric'}, ...
                 {'2d', 'finite', 'real', 'nonnan'} );
             
