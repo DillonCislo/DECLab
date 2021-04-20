@@ -42,11 +42,20 @@ classdef DiscreteExteriorCalculus < handle
         % #Vx#V Hodge dual operator mapping primal 0-forms to dual 2-forms
         hd0
         
+        % #Vx#V Hodge dual operator mapping dual 2-forms to primal 0-forms
+        hdd2
+        
         % #Ex#E Hodge dual operator mapping primal 1-forms to dual 1-forms
         hd1
         
+        % #Ex#E Hodge dual operator mapping dual 1-forms to primal 1-forms
+        hdd1
+        
         % #Fx#F  Hodge dual operator mapping primal 2-forms to dual 0-forms
         hd2
+        
+        % #Fx#F Hodge dual operator mapping dual 0-forms to primal 2-forms
+        hdd0
         
         % #Ex(3#V) Flat operator mapping primal vector fields to primal
         % 1-forms
@@ -56,9 +65,16 @@ classdef DiscreteExteriorCalculus < handle
         % 1-forms
         flatDP
         
+        % #Ex(3#F) Flat operator mapping dual vector fields to dual 1-forms
+        flatDD
+        
         % (3#F)x#E Sharp operator mapping primal 1-forms to dual vector
         % fields
         sharpPD
+        
+        % (3#F)x#E Sharp operator mapping dual 1-forms to dual vector
+        % fields
+        sharpDD
         
     end
     
@@ -94,7 +110,7 @@ classdef DiscreteExteriorCalculus < handle
             
             this.F = F;
             this.V = V;
-            this.E = edges( triangulation(F, V) );
+            this.E = sort(edges( triangulation(F, V) ), 2);
             
             % Construct DEC Operators -------------------------------------
             this.constructDECOperators();
@@ -144,10 +160,45 @@ classdef DiscreteExteriorCalculus < handle
                 {'2d', 'finite', 'nonnan', 'real', ...
                 'ncols', size(this.V, 2), 'nrows', size(this.F, 1)} );
             
+            % Project the vector field onto the tangent space of its
+            % respective face ---------------------------------------------
+            FN = faceNormal(triangulation(this.F, this.V));
+            U = U - repmat(dot(U, FN, 2), 1, 3) .* FN;
+            
             % Apply flat operator to construct primal 1-form --------------
             UFlat = this.flatDP * U(:);
             
         end
+        
+        function UFlat = dualVectorToDual1Form(this, U)
+            %DUALVECTORTODUAL1FORM Transforms the tangent part of a vector
+            %field living on triangulation faces (dual vertices) into a
+            %dual 1-form field. An implementation of a 'discrete flat'
+            %operator
+            %
+            %   INPUT PARAMETERS:
+            %
+            %       - U:        #FxD vector field
+            %
+            %   OUTPUT PARAMETERS:
+            %
+            %       - UFlat:    #Ex1 dual 1-form
+            
+            % Input Processing --------------------------------------------
+            validateattributes( U, {'numeric'}, ...
+                {'2d', 'finite', 'nonnan', 'real', ...
+                'ncols', size(this.V, 2), 'nrows', size(this.F, 1)} );
+            
+            % Project the vector field onto the tangent space of its
+            % respective face ---------------------------------------------
+            FN = faceNormal(triangulation(this.F, this.V));
+            U = U - repmat(dot(U, FN, 2), 1, 3) .* FN;
+            
+            % Apply flat operator to construct dual 1-form ----------------
+            UFlat = this.flatDD * U(:);
+            
+        end
+            
         
         function USharp = primal1FormToDualVector(this, U)
             %PRIMAL1FORMTODUALVECTOR Transforms a primal 1-form field
@@ -172,6 +223,35 @@ classdef DiscreteExteriorCalculus < handle
             
             % Apply sharp operator to construct dual vector field ---------
             USharp = this.sharpPD * U;
+            
+            % Re-shape to appropriate output dimensions
+            USharp = reshape( USharp, size(this.F, 1), size(this.V, 2) );
+            
+        end
+        
+        function USharp = dual1FormToDualVector(this, U)
+            %DUAL1FORMTODUALVECTOR Transforms a dual 1-form field living on
+            %mesh (dual) edges into a tangent dual vector field living on
+            %triangulation faces (dual vertices)
+            %
+            %   INPUT PARAMETERS:
+            %
+            %       - U:        #Ex1 dual 1-form
+            %
+            %   OUTPUT PARAMETERS:
+            %
+            %       - USharp:   #FxD dual vector field
+            
+            % Input Processing --------------------------------------------
+            validateattributes( U, {'numeric'}, ...
+                {'2d', 'vector', 'numel', size(this.E, 1), 'finite', ...
+                'real', 'nonnan'} );
+            
+            % Ensure that U is a column vector
+            if (size(U, 2) ~= 1), U = U.'; end
+            
+            % Apply sharp operator to construct dual vector field ---------
+            USharp = this.sharpDD * U;
             
             % Re-shape to appropriate output dimensions
             USharp = reshape( USharp, size(this.F, 1), size(this.V, 2) );
@@ -206,38 +286,67 @@ classdef DiscreteExteriorCalculus < handle
             
         end
         
-        function divU = divergence(this, U)
+        function divU = divergence(this, U, route)
             %DIVERGENCE Calculates the discrete divergence of a dual
             %tangent vector field or something like a divergence of a
-            %primal 1-form
+            %primal/dual 1-form
             %
             %   INPUT PARAMETERS:
             %
-            %       - U:    #FxD dual vector field OR
-            %               #VxD primal vector field OR
-            %               #Ex1 primal 1-form
+            %       - U:        #FxD dual vector field OR
+            %                   #VxD primal vector field OR
+            %                   #Ex1 primal 1-form OR
+            %                   #Ex1 dual 1-form
+            %
+            %       - route:    The type of route to take when calculating
+            %                   the divergence
+            %                   'primal' (default) maps a primal 1-form to
+            %                   a primal 0-form
+            %                   'dual' maps a dual 1-form to a dual 0-form
             %
             %   OUTPUT PARAMETERS
             %
-            %       - divU: #Vx1 primal 0-form
+            %       - divU:     #Vx1 primal 0-form OR
+            %                   #Fx1 dual 0-form
             
             % Input Processing --------------------------------------------
+            if (nargin < 3), route = 'primal'; end
+            
             validateattributes( U, {'numeric'}, ...
                 {'2d', 'finite', 'real', 'nonnan'} );
             
+            if ~(strcmpi(route, 'primal') || strcmpi(route, 'dual'))
+                error('Invalid primal/dual calculation route');
+            end
+            
             if ~isvector(U)
                 
-                % If the input field is a tangent dual vector field we must
-                % convert it into a primal 1-form
+                % If the input field is a tangent primal/dual vector field
+                % we must convert it into a primal 1-form
                 assert(size(U, 2) == size(this.V, 2), ...
                     'Input vector field has incorrect dimensions!');
                 
                 if (size(U, 1) == size(this.F, 1))
-                    U = this.dualVectorToPrimal1Form(U);
+                    
+                    if strcmpi(route, 'primal')
+                        U = this.dualVectorToPrimal1Form(U);
+                    else
+                        U = this.dualVectorToDual1Form(U);
+                    end
+                    
                 elseif (size(U, 1) == size(this.V, 1))
-                    U = this.primalVectorToPrimal1Form(U);
+                    
+                    if strcmpi(route, 'primal')
+                        U = this.primalVectorToPrimal1Form(U);
+                    else
+                        error(['A primal->dual flat operator has not ' ...
+                            'yet been implemented']);
+                    end
+                    
                 else
+                    
                     error('Input vector field is improperly sized!');
+                    
                 end
                 
             else
@@ -250,41 +359,78 @@ classdef DiscreteExteriorCalculus < handle
             end
             
             % Calculate divergence ----------------------------------------
-            divU = inv(this.hd0) * this.dd1 * this.hd1 * U;
+            
+            if strcmpi(route, 'primal')
+                % divU = inv(this.hd0) * this.dd1 * this.hd1 * U;
+                divU = this.hdd2 * this.dd1 * this.hd1 * U;
+            else
+                % divU = this.hd2 * this.d1 * (-inv(this.hd1)) * U;
+                divU = this.hd2 * this.d1 * this.hdd1 * U;
+            end
             
         end
         
-        function curlU = curl(this, U)
-            %CURL Calculates something like a discrete curl for a dual
-            %tangent vector field or a primal 1-form.
+        function curlU = curl(this, U, route)
+            %CURL Calculates something like a discrete curl for a
+            %primal/dual tangent vector field or a primal/dual 1-form.
             %
             %   INPUT PARAMETERS:
             %
-            %       - U:    #FxD dual vector field OR
-            %               #VxD primal vector field OR
-            %               #Ex1 primal 1-form
+            %       - U:        #FxD dual vector field OR
+            %                   #VxD primal vector field OR
+            %                   #Ex1 primal 1-form OR
+            %                   #Ex1 dual 1-form
+            %
+            %       - route:    The type of route to take when calculating
+            %                   the divergence
+            %                   'primal' (default) maps a primal 1-form to
+            %                   a dual 0-form
+            %                   'dual' maps a dual 1-form to a primal
+            %                   0-form
             %
             %   OUTPUT PARAMETERS
             %
-            %       - curlU: #Fx1 dual 0-form
-            
+            %       - curlU:    #Fx1 dual 0-form OR
+            %                   #Vx1 primal 0-form
+          
             % Input Processing --------------------------------------------
+            if (nargin < 3), route = 'primal'; end
+            
             validateattributes( U, {'numeric'}, ...
                 {'2d', 'finite', 'real', 'nonnan'} );
             
+            if ~(strcmpi(route, 'primal') || strcmpi(route, 'dual'))
+                error('Invalid primal/dual calculation route');
+            end
+            
             if ~isvector(U)
                 
-                % If the input field is a tangent dual vector field we must
-                % convert it into a primal 1-form
+                % If the input field is a tangent primal/dual vector field
+                % we must convert it into a primal 1-form
                 assert(size(U, 2) == size(this.V, 2), ...
                     'Input vector field has incorrect dimensions!');
                 
                 if (size(U, 1) == size(this.F, 1))
-                    U = this.dualVectorToPrimal1Form(U);
+                    
+                    if strcmpi(route, 'primal')
+                        U = this.dualVectorToPrimal1Form(U);
+                    else
+                        U = this.dualVectorToDual1Form(U);
+                    end
+                    
                 elseif (size(U, 1) == size(this.V, 1))
-                    U = this.primalVectorToPrimal1Form(U);
+                    
+                    if strcmpi(route, 'primal')
+                        U = this.primalVectorToPrimal1Form(U);
+                    else
+                        error(['A primal->dual flat operator has not ' ...
+                            'yet been implemented']);
+                    end
+                    
                 else
+                    
                     error('Input vector field is improperly sized!');
+                    
                 end
                 
             else
@@ -297,7 +443,13 @@ classdef DiscreteExteriorCalculus < handle
             end
             
             % Calculate curl ----------------------------------------------
-            curlU = this.hd2 * this.d1 * U;
+            
+            if strcmpi(route, 'primal')
+                curlU = this.hd2 * this.d1 * U;
+            else
+                % curlU = inv(this.hd0) * this.dd1 * U;
+                curlU = this.hdd2 * this.dd1 * U;
+            end
             
         end
         
@@ -357,18 +509,27 @@ classdef DiscreteExteriorCalculus < handle
             end
             
             % Peform the decomposition ------------------------------------
-            % WHAT THE FUCK IS WITH THESE MINUS SIGNS
             
             % Calculate the scalar potential
             scalarP = ( this.dd1 * this.hd1 * this.d0 ) \ ...
                 ( this.dd1 * this.hd1 * U );
             divU = this.d0 * scalarP;
             
-            % Calculate the vector potential (SIGN CHANGE CHECK)
-            vectorP = ( this.d1 * inv(this.hd1) * this.dd0 ) \ ...
+            % Calculate the vector potential
+            % (MINUS SIGNS SHOULD NOW BE ACCOUNTED FOR)
+            
+            % OLD WAY: 'rotU' was the same, but 'vectorP' was off by a
+            % minus sign
+            % vectorP = ( this.d1 * inv(this.hd1) * this.dd0 ) \ ...
+            %     ( this.d1 * U );
+            % vectorP = inv(this.hd2) * vectorP;
+            % rotU = inv(this.hd1) * this.dd0 * this.hd2 * vectorP;
+            
+            % NEW WAY
+            vectorP = ( this.d1 * this.hdd1 * this.dd0 ) \ ...
                 ( this.d1 * U );
-            vectorP = inv(this.hd2) * vectorP;
-            rotU = inv(this.hd1) * this.dd0 * this.hd2 * vectorP;
+            vectorP = this.hdd0 * vectorP;
+            rotU = this.hdd1 * this.dd0 * this.hd2 * vectorP;
             
             % Calculate the harmonic part of U
             if isVector
@@ -467,7 +628,9 @@ classdef DiscreteExteriorCalculus < handle
                 case '0form'
                     
                     if normalizeAreas
-                        lapU = inv(this.hd0) * this.dd1 * ...
+                        % lapU = inv(this.hd0) * this.dd1 * ...
+                        %     this.hd1 * this.d0 * U;
+                        lapU = this.hdd2 * this.dd1 * ...
                             this.hd1 * this.d0 * U;
                     else
                         lapU = this.dd1 * this.hd1 * this.d0 * U;
@@ -551,14 +714,8 @@ classdef DiscreteExteriorCalculus < handle
             end
             
         end
-            
-            
-                    
-        
-        
-    end
-    
 
-    
+    end
+
 end
 

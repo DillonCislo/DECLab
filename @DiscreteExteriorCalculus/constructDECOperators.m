@@ -86,8 +86,8 @@ fN = fN ./ ( 2 .* fA );
 % living on primal vertices) to primal 1-forms living on primal edges. In
 % order to work as a single linear operator vector fields should be
 % represented as a single (3#V)x1 column vector: [Vx; Vy; Vz]
-
-% The 'flatDP' operator can be constructed as the composition of two
+%
+% The 'flatPP' operator can be constructed as the composition of two
 % separate operators. The first operator constructs a tangent vector on
 % each primal edge by averaging the primal vectors living on the vertices
 % defining that edge. The operator is of size (3#E)x(3#V) with 2 non-zero
@@ -123,7 +123,7 @@ this.flatPP = PP2 * PP1;
 % vectors living on dual vertices) to primal 1-forms living on primal
 % edges. In order to work as a single linear operator vector fields should
 % be represented as a single (3#F)x1 column vector: [ Vx; Vy; Vz ] 
-
+%
 % The 'flatDP' operator can be constructed as the composition of two
 % separate operators.  The first operator maps calculates the dot product
 % of each dual vector with the directed edge vectors defining the boundary
@@ -170,23 +170,69 @@ DP2 = sparse( I, J, Q, numE, 3*numF );
 
 this.flatDP = DP2 * DP1;
 
-% Construct sharpPD -------------------------------------------------------
-% The 'sharpPD' operator maps primal 1-forms living on primal edges into
-% dual discrete vector fields (tangent vectors living on dual vertices).
-% The operator has size (3#F)x#E.  The output is a single (3#F)x1 column
-% vector: [ Vx; Vy; Vz ];
+% Construct flatDD --------------------------------------------------------
+% The 'flatDD' operator maps dual discrete vector fields (tangent vectors
+% living on dual vertices) to dual 1-forms living on dual edges. In order
+% to work as a single linear operator vector fields should be represented
+% as a single (3#F)x1 column vector: [ Vx; Vy; Vz ]
 %
-% As best I can tell the choice of sharp operator seems to be a little
-% ad-hoc.  Here, the sharp operator is basically just an evaluation of a
-% continuous 1-form interpolant at each facet centroid.  This choice was
-% made so that the gradient operator on primal 0-forms ( sharpDP * d0 )
-% matches exactly the classical FEM gradient operator
+% A single dual edge intersects two triangulation faces (or only one if
+% that edge lies on the mesh boundary). The dual 1-form is taken to be the
+% sum of the projections of the dual vector fields on each of those faces
+% attached to the dual edge with the assocated vector corresponding to the
+% intersection of the dual edge with that face.
 
 % Directed edge vectors defined by the orientations of FACES
 Ei = V(F(:,3), :) - V(F(:,2), :); % Edge opposite vertex i in face f
 Ej = V(F(:,1), :) - V(F(:,3), :); % Edge opposite vertex j in face f
 Ek = V(F(:,2), :) - V(F(:,1), :); % Edge opposite vertex k in face f
 
+% The dual edge vectors defined by the orientations of FACES
+
+% Dual edge opposite vertex i in face f
+dualEi = cross(fN, Ei ./ repmat(sqrt(sum(Ei.^2, 2)), 1, 3), 2); 
+dualEi = repmat(dualLengthInt(:,1), 1, 3) .* dualEi ;
+
+% Dual edge opposite vertex j in face f
+dualEj = cross(fN, Ej ./ repmat(sqrt(sum(Ej.^2, 2)), 1, 3), 2); 
+dualEj = repmat(dualLengthInt(:,2), 1, 3) .* dualEj ;
+
+% Dual edge opposite vertex k in face f
+dualEk = cross(fN, Ek ./ repmat(sqrt(sum(Ek.^2, 2)), 1, 3), 2); 
+dualEk = repmat(dualLengthInt(:,3), 1, 3) .* dualEk ;
+
+% We flip the sign of the dual edge where the orientation of the
+% face does not match the intrinsic orientation of an edge
+si = 1 - 2 .* any( F(:, [2 3]) - E(feIDx(:,1), :), 2 );
+sj = 1 - 2 .* any( F(:, [3 1]) - E(feIDx(:,2), :), 2 );
+sk = 1 - 2 .* any( F(:, [1 2]) - E(feIDx(:,3), :), 2 );
+
+dualEi = dualEi .* repmat( si, 1, 3 );
+dualEj = dualEj .* repmat( sj, 1, 3 );
+dualEk = dualEk .* repmat( sk, 1, 3 );
+
+I = repmat(feIDx, 3, 1);
+
+J = (1:numF).';
+J = [ J; (J+numF); (J+2*numF) ];
+J = repmat(J, 1, 3);
+
+Q = [ dualEi(:), dualEj(:), dualEk(:) ];
+
+this.flatDD = sparse(I, J, Q, numE, 3*numF);
+
+% Construct sharpPD -------------------------------------------------------
+% The 'sharpPD' operator maps primal 1-forms living on primal edges into
+% dual discrete vector fields (tangent vectors living on dual vertices).
+% The operator has size (3#F)x#E.  The output is a single (3#F)x1 column
+% vector: [ Vx; Vy; Vz ]
+%
+% As best I can tell the choice of sharp operator seems to be a little
+% ad-hoc.  Here, the sharp operator is basically just an evaluation of a
+% continuous 1-form interpolant at each facet centroid.  This choice was
+% made so that the gradient operator on primal 0-forms ( sharpDP * d0 )
+% matches exactly the classical FEM gradient operator
+%
 % The interpolation of the 1-forms is performed using the 'Whitney forms'.
 %
 % The Whitney 0-form, Bi, is simply the familiar 'hat function' defined on
@@ -196,7 +242,7 @@ Ek = V(F(:,2), :) - V(F(:,1), :); % Edge opposite vertex k in face f
 % Whitney 1-forms, Wk, interpolate values stored on edges.  For an edge
 % oriented away form vertex i towards vertex j: Wk = Bi DBj - Bj DBi, where
 % DBi is the gradient of the Whitney 0-form Bi. At the triangle centroid,
-% Bi = Bj = Bk = 1/3;
+% Bi = Bj = Bk = 1/3
 
 % The gradients of the Whitney 0-forms
 DBi = cross( fN, Ei, 2 ) ./ ( 2 .* fA );
@@ -210,9 +256,9 @@ Wk = ( DBj - DBi ) ./ 3;
 
 % We flip the sign of the Whitney 1-form where the orientation of the
 % face does not match the intrinsic orientation of an edge
-si = 1 - 2 .* any( F(:, [2 3]) - E(feIDx(:,1), :), 2 );
-sj = 1 - 2 .* any( F(:, [3 1]) - E(feIDx(:,2), :), 2 );
-sk = 1 - 2 .* any( F(:, [1 2]) - E(feIDx(:,3), :), 2 );
+% si = 1 - 2 .* any( F(:, [2 3]) - E(feIDx(:,1), :), 2 );
+% sj = 1 - 2 .* any( F(:, [3 1]) - E(feIDx(:,2), :), 2 );
+% sk = 1 - 2 .* any( F(:, [1 2]) - E(feIDx(:,3), :), 2 );
 
 Wi = Wi .* repmat( si, 1, 3 );
 Wj = Wj .* repmat( sj, 1, 3 );
@@ -226,6 +272,34 @@ J = J(:);
 Q = [ Wi(:); Wj(:); Wk(:) ];
 
 this.sharpPD = sparse( I, J, Q, 3*numF, numE );
+
+% Construct sharpDD -------------------------------------------------------
+% The 'sharpDD' operator maps dual 1-forms living on dual edges into dual
+% discrete vector fields (tangent vectors living on dual vertices). The
+% operator has size (3#F)x#E. The output is a single (3#F)x1 column vector:
+% [Vx; Vy; Vz]
+%
+% Following Mohamed et al. (2016), the interpolation of dual 1-forms onto
+% 2-simplexes is accomplished by interpolating the values of the associated
+% primal 1-form using the rotated Whitney 1-forms, i.e. the
+% usual Whitney 1-forms rotated CCW 90deg in the plane of the associated
+% triangular face.
+%
+% The 'sharpDD' operator can be constructed as the composition of two
+% separate operators. The first operator is simply the Hodge dual
+% transforming dual 1-forms into primal 1-forms. This operator is
+% constructed separately in the section 'Construct Hodge Dual Operators'.
+% The second operator applies the rotated Whitney 1-forms to the associated
+% primal 1-forms. Here we simply construct the second operator.
+
+% The signed, rotated Whitney 1-forms
+rotWi = cross( fN, Wi, 2 );
+rotWj = cross( fN, Wj, 2 );
+rotWk = cross( fN, Wk, 2 );
+
+Q = [ rotWi(:); rotWj(:); rotWk(:) ];
+
+incomplete_sharpDD = sparse( I, J, Q, 3*numF, numE );
 
 %==========================================================================
 % Construct Exterior Derivative Operators
@@ -300,6 +374,14 @@ Q = sparse( F, 1, AV_F, numV, 1 );
 
 this.hd0 = sparse( I, J, Q, numV, numV );
 
+% Construct hdd2 ----------------------------------------------------------
+% The 'hdd2' operator acts on dual 2-forms (defined on dual 2-cells) and
+% transforms them into primal 0-forms (defined on primal mesh vertices). In
+% the circumcentric dual formulation, it is simply the inverse of the 'hd0'
+% operator
+
+this.hdd2 = sparse( I, J, 1./Q, numV, numV );
+
 % Construct hd1 -----------------------------------------------------------
 % The 'hd1' operator acts on primal 1-forms (defined on primal mesh edges)
 % and tranforms them into dual 1-forms (defined on dual mesh edges)
@@ -313,6 +395,18 @@ Q = sparse( feIDx, 1, cotAng ./ 2, numE, 1 );
 
 this.hd1 = sparse( I, J, Q, numE, numE );
 
+% Assemble the full 'sharpDD' operator
+this.sharpDD = incomplete_sharpDD * sparse( I, J, 1./Q, numE, numE );
+
+% Construct hdd1 ----------------------------------------------------------
+% The 'hdd1' operator acts on dual 1-forms (defined on dual mesh edges) and
+% transforms them into primal 1-forms (defined on primal mesh edges). In
+% the circumcentric dual formulation, it is MINUS the inverse of the 'hd1'
+% operator (to account for the minus sign accumulated in the operation
+% **v = -v for a 1-form v)
+
+this.hdd1 = sparse( I, J, -1./Q, numE, numE );
+
 % Construct hd2 -----------------------------------------------------------
 % The 'hd2' operator acts on primal 2-forms (defined on primal mesh faces)
 % and transforms them into dual 0-forms (defined on dual mesh vertices)
@@ -322,6 +416,14 @@ J = (1:numF).';
 Q = 1 ./ fA;
 
 this.hd2 = sparse( I, J, Q, numF, numF );
+
+% Construct hdd0 ----------------------------------------------------------
+% The 'hdd0' operator acts on dual 0-forms (defined on dual mesh vertices)
+% and transforms them into primal 2-forms (defined on primal mesh faces).
+% In the circumcentric dual formulation, it is simply the inverse of the
+% 'hd2' operator
+
+this.hdd0 = sparse( I, J, 1./Q, numF, numF );
 
 end
 
