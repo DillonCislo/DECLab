@@ -3,35 +3,27 @@
 %   This is a test of the functionality of the various methods of the
 %   'Discrete Exterior Calculus' class.
 %
-%   by Dillon Cislo 01/31/2020
+%   by Dillon Cislo and Noah P Mitchell 2022
 %
 %==========================================================================
 
 clear; close all; clc;
-
-addpath(genpath('/mnt/data/code/CGAL_Code'));
-addpath(genpath('/mnt/data/code/DEC'));
-addpath(genpath('/mnt/data/code/gut_matlab/DiscreteCurvature'));
-addpath(genpath('/mnt/data/code/gptoolbox'));
-addpath(genpath('/mnt/data/code/GrowSurface'));
-addpath(genpath('/mnt/data/code/MinimizeElasticEnergy'));
-addpath(genpath('/mnt/data/code/QCMap'));
-addpath(genpath('/mnt/data/code/TexturePatch'));
 
 %--------------------------------------------------------------------------
 % Generate a surface triangulation
 %--------------------------------------------------------------------------
 
 % A triangulation of the unit sphere
-% TR = sphereTriangulationVogel(5000);
-TR = sphericalTriangulation( 'NumIterations', 6 );
+[tutorialDir, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
+cd(tutorialDir)
 
-% Make sure that faces are consistently ordered
-F = bfs_orient(TR.ConnectivityList);
-V = TR.Points;
+load('./testData.mat', 'sphericalTri')
+cd('..')
 
 % Re-create the triangulation
-TR = triangulation( F, V );
+TR = sphericalTri;
+V = TR.Points;
+F = TR.ConnectivityList;
 
 % Edge connectivity list
 E = edges(TR);
@@ -227,7 +219,7 @@ fprintf('Max Relative Error = %f\n', max(relErr));
 fprintf('Median Relative Error = %f\n', median(relErr));
 
 % The vector field to plot
-plotU = normalizerow(gradS);
+plotU = vecnorm(gradS, 2, 2);
 
 % Colormap for the error
 crange = [min(relErr) 0.5];
@@ -267,6 +259,7 @@ subplot(1,3,3)
 histogram(relErr)
 xlim([0 0.5]);
 title('The Relative Error');
+saveas(gcf, './DEC_sphericalMesh_relativeError_gradient.jpg')
 
 clear relErr rmsErr plotU crange errColor ssf NGradS
 
@@ -299,23 +292,33 @@ fprintf('Max Relative Error = %f\n', max(relErr));
 fprintf('Median Relative Error = %f\n', median(relErr));
 
 % Colormap for the error
-% crange = [min(relErr) 0.5];
 crange = [0 0.5];
-errColor = vals2colormap( relErr, 'parula', crange );
+vals = relErr ;
+% Generate the colormap
+cmap = parula(256);
+% Normalize the values to be between 1 and 256
+vals(vals < crange(1)) = crange(1);
+vals(vals > crange(2)) = crange(2);
+valsN = round(((vals - crange(1)) ./ diff(crange)) .* 255)+1;
+% Convert any nans to ones
+valsN(isnan(valsN)) = 1;
+% Convert the normalized values to the RGB values of the colormap
+errColor = cmap(valsN, :);
 
 % View results
 figure
 
-subplot(1,3,1);
+subplot(2,2,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', lapS, ...
     'FaceColor', 'interp', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
     'AmbientStrength', 0.8 );
 axis equal tight
+colorbar
 camlight
 title('The Laplacian of the Scalar Field');
 
-subplot(1,3,2)
+subplot(2,2,2)
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
     'FaceColor', 'flat', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -325,17 +328,18 @@ set(gca, 'Clim', crange);
 axis equal tight
 title('The Spatial Distribution Relative Error');
 
-subplot(1,3,3)
+subplot(2,2,3:4)
 histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
+saveas(gcf, './DEC_sphericalMesh_relativeError_Laplacian.jpg')
 
 clear relErr rmsErr plotU crange errColor ssf NLapS normalizeAreas
  
 
 %% Calculate the Laplacian of the vector field
-addpath('/mnt/data/code/gut_matlab/mesh_handling/')
-addpath('/mnt/data/code/gut_matlab/mesh_handling/meshDEC/')
+% addpath('/mnt/data/code/gut_matlab/mesh_handling/')
+% addpath('/mnt/data/code/gut_matlab/mesh_handling/meshDEC/')
 
 % Check that field is in fact tangential
 close all
@@ -389,7 +393,7 @@ axis equal
 caxis([0, maxC])
 colorbar
 sgtitle('Laplacian of tangential velocity field')
-saveas(gcf, './laplacian_tangentialVel.png')
+saveas(gcf, './DEC_sphericalMesh_laplacian_tangentialVel.png')
 
 
 %% Test against sensitivity to projection and re-averaging onto vertices
@@ -427,7 +431,7 @@ caxis([0, 3.5])
 colorbar
 sgtitle('Laplacian of tangential velocity field after resolution')
 
-saveas(gcf, './laplacian_tangentialVel_reaveraged.png')
+saveas(gcf, './DEC_sphericalMesh_laplacian_tangentialVel_reaveraged.png')
 
 %% Calculate the Divergence of a Tangent Vector Field =====================
 % The divergence calculated by the DEC does NOT match the classical FEM

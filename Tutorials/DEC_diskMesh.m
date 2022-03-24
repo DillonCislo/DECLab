@@ -2,7 +2,8 @@
 % This is a test of the Helmholtz-Hodge decomposition functionality of the
 % Discrete Exterior Calculus implementation
 %
-% by Dillon Cislo 2/3/2020
+%   by Dillon Cislo and Noah P Mitchell 2022
+%
 %==========================================================================
 
 clear; close all; clc;
@@ -10,18 +11,16 @@ clear; close all; clc;
 %--------------------------------------------------------------------------
 % Create a triangulation of the unit disk
 %--------------------------------------------------------------------------
+[tutorialDir, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
+cd(tutorialDir)
 
-% TR = diskTriangulation(50);
-TR = diskTriangulationVogel();
-TR = delaunayTriangulation(TR.Points);
-
-% Make sure that faces are consistently ordered
-F = bfs_orient(TR.ConnectivityList);
-% F = fliplr(F);
-V = [ TR.Points, zeros(size(TR.Points,1), 1) ]; % MAKE VERTICES 3D
+load('testData.mat', 'diskTri')
+cd('..')
 
 % Re-create the triangulation
-TR = triangulation( F, V );
+TR = diskTri ;
+V = diskTri.Points ;
+F = diskTri.ConnectivityList ;
 
 % Edge connectivity list
 E = edges(TR);
@@ -58,11 +57,16 @@ clc;
 % Compare the Scalar Gradient Operator
 %--------------------------------------------------------------------------
 
-gradFEM = grad(V, F);
 gradDEC = DEC.sharpPD * DEC.d0;
 
-maxErr = max(abs(full(gradFEM(:)-gradDEC(:))));
-fprintf('Maximum Difference in Gradient Operators = %f\n', maxErr);
+try
+    gradFEM = grad(V, F);
+    maxErr = max(abs(full(gradFEM(:)-gradDEC(:))));
+    fprintf('Maximum Difference in Gradient Operators = %f\n', maxErr);
+
+catch
+    disp('To compare DEC against FEM results, install gptoolbox and add to your MATLAB path')
+end
 
 clear gradFEM gradDEC maxErr
 
@@ -71,42 +75,43 @@ clear gradFEM gradDEC maxErr
 %--------------------------------------------------------------------------
 
 % The non-area weighted Laplacians
-LN_FEM = cotmatrix(V, F);
 LN_DEC = DEC.dd1 * DEC.hd1 * DEC.d0;
 
-maxErr = max(abs(full(LN_FEM(:)-LN_DEC(:))));
-fprintf('Maximum Difference in Bare Laplacian Operators = %f\n', maxErr);
+try    
+    LN_FEM = cotmatrix(V, F);
+    maxErr = max(abs(full(LN_FEM(:)-LN_DEC(:))));
+    fprintf('Maximum Difference in Bare Laplacian Operators = %f\n', maxErr);
 
-% The area weighted Laplacians
-[ ~, ~, vA ] = calculate_gaussian_curvature(F, V); % Volumes of dual 2-forms
-invVA = 1 ./ vA; invVA(isnan(invVA)) = 0; invVA(isinf(invVA)) = 0;
-LA_FEM = diag(invVA) * LN_FEM;
-LA_DEC = inv(DEC.hd0) * DEC.dd1 * DEC.hd1 * DEC.d0;
-
-maxErr = max(abs(full(LA_FEM(:)-LA_DEC(:))));
-fprintf('Maximum Difference in Area-Weighted Laplacian Operators = %f\n', maxErr);
-
-clear LN_FEM LN_DEC LA_FEM LA_DEC
+    clear LN_FEM LN_DEC 
+catch
+    disp('To compare DEC against FEM results, install gptoolbox and add to your MATLAB path')
+    
+end
 
 %--------------------------------------------------------------------------
 % Compare Vector Divergence Operator
 %--------------------------------------------------------------------------
 
-divFEM = div(V, F);
 divDEC = inv(DEC.hd0) * DEC.dd1 * DEC.hd1 * DEC.flatDP;
 
-maxErr = max(abs(full(divFEM(:)-divDEC(:))));
-fprintf('Maxumum Difference Between DEC Divergence and Bare FEM Divergence = %f\n', maxErr);
+try
+    divFEM = div(V, F);
+    maxErr = max(abs(full(divFEM(:)-divDEC(:))));
+    fprintf('Maxumum Difference Between DEC Divergence and Bare FEM Divergence = %f\n', maxErr);
 
-% Re-scale the bare FEM divergence operator
-divFEM = 2 .* diag(invVA) * divFEM;
+    % Re-scale the bare FEM divergence operator
+    divFEM = 2 .* diag(invVA) * divFEM;
 
-% THIS SCALING BRINGS THE ELEMENTS MUCH CLOSER TO EACH OTHER, BUT THEIR
-% SPARSITY PATTERNS ARE DIFFERENT AND I DO NOT UNDERSTAND WHY
-maxErr = max(abs(full(divFEM(:)-divDEC(:))));
-fprintf('Maxumum Difference Between DEC Divergence and Weighted FEM Divergence = %f\n', maxErr);
+    % THIS SCALING BRINGS THE ELEMENTS MUCH CLOSER TO EACH OTHER, BUT THEIR
+    % SPARSITY PATTERNS ARE DIFFERENT AND I DO NOT UNDERSTAND WHY
+    maxErr = max(abs(full(divFEM(:)-divDEC(:))));
+    fprintf('Maxumum Difference Between DEC Divergence and Weighted FEM Divergence = %f\n', maxErr);
 
-clear divFEM divDEC maxErr
+    clear divFEM divDEC maxErr
+catch
+    disp('To compare DEC against FEM results, install gptoolbox and add to your MATLAB path')
+    
+end
 
 
 %% ************************************************************************
@@ -148,19 +153,31 @@ clc;
     DEC.helmholtzHodgeDecomposition(U);
 
 % Normalize rows for plotting
-plotU = normalizerow(U);
-plotDivU = normalizerow(divU);
-plotRotU = normalizerow(rotU);
-plotHU = normalizerow(harmU);
+plotU = U ./ vecnorm(U, 2, 2);
+plotDivU = divU ./ vecnorm(divU, 2, 2);
+plotRotU = rotU ./ vecnorm(rotU, 2, 2);
+plotHU = harmU ./ vecnorm(harmU, 2, 2);
 
 % Sub-sampling factor for vector field visualization
 ssf = 15;
 
 figure
+lw = 1 ; % line width for quiver arrows
 
 % The full vector field ---------------------------------------------------
+
+% Plot based on internal angles
+s12 = vecnorm(V(F(:,2),:) - V(F(:,1),:), 2, 2);
+s31 = vecnorm(V(F(:,3),:) - V(F(:,1),:), 2, 2);
+s23 = vecnorm(V(F(:,3),:) - V(F(:,2),:), 2, 2);
+a23 = acos((s12.^2 + s31.^2 - s23.^2)./(2.*s12.*s31));
+a31 = acos((s23.^2 + s12.^2 - s31.^2)./(2.*s23.*s12));
+a12 = acos((s31.^2 + s23.^2 - s12.^2)./(2.*s31.*s23));
+internal_angles = [a23 a31 a12];
+
+
 UColors = sparse( F(:), repmat(1:size(F,1),1,3), ...
-    internalangles(V,F), size(V,1), size(F,1) );
+    internal_angles, size(V,1), size(F,1) );
 UColors = UColors * U;
 UColors = sqrt(sum(UColors.^2, 2));
 
@@ -172,7 +189,7 @@ patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', UColors, ...
 hold on
 quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
     plotU(1:ssf:end, 1), plotU(1:ssf:end, 2), plotU(1:ssf:end, 3), ...
-    1, 'LineWidth', 2, 'Color', 'k' );
+    1, 'LineWidth', lw, 'Color', 'k' );
 hold off
 axis equal tight
 camlight
@@ -188,7 +205,7 @@ patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', scalarP, ...
 hold on
 quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
     plotDivU(1:ssf:end, 1), plotDivU(1:ssf:end, 2), plotDivU(1:ssf:end, 3), ...
-    1, 'LineWidth', 2, 'Color', 'k' );
+    1, 'LineWidth', lw, 'Color', 'k' );
 hold off
 axis equal tight
 camlight
@@ -204,7 +221,7 @@ patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', vectorP, ...
 hold on
 quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
     plotRotU(1:ssf:end, 1), plotRotU(1:ssf:end, 2), plotRotU(1:ssf:end, 3), ...
-    1, 'LineWidth', 2, 'Color', 'k' );
+    1, 'LineWidth', lw, 'Color', 'k' );
 hold off
 axis equal tight
 camlight
@@ -213,7 +230,7 @@ colorbar
 
 % The harmonic part -------------------------------------------------------
 HUColors = sparse( F(:), repmat(1:size(F,1),1,3), ...
-    internalangles(V,F), size(V,1), size(F,1) );
+    internal_angles, size(V,1), size(F,1) );
 HUColors = HUColors * harmU;
 HUColors = sqrt(sum(HUColors.^2, 2));
 
@@ -226,7 +243,7 @@ patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', HUColors, ...
 hold on
 quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
     plotHU(1:ssf:end, 1), plotHU(1:ssf:end, 2), plotHU(1:ssf:end, 3), ...
-    1, 'LineWidth', 2, 'Color', 'k' );
+    1, 'LineWidth', lw, 'Color', 'k' );
 hold off
 axis equal tight
 camlight
