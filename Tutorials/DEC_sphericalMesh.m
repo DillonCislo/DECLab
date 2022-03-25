@@ -17,7 +17,7 @@ clear; close all; clc;
 [tutorialDir, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(tutorialDir)
 
-load('./testData.mat', 'sphericalTri')
+load('testData.mat', 'sphericalTri')
 cd('..')
 
 % Re-create the triangulation
@@ -219,19 +219,30 @@ fprintf('Max Relative Error = %f\n', max(relErr));
 fprintf('Median Relative Error = %f\n', median(relErr));
 
 % The vector field to plot
-plotU = vecnorm(gradS, 2, 2);
+plotU = gradS ./ vecnorm(gradS, 2, 2);
 
 % Colormap for the error
-crange = [min(relErr) 0.5];
-errColor = vals2colormap( relErr, 'parula', crange );
+crange = [0 0.5];
+vals = relErr ;
+% Generate the colormap
+cmap = parula(256);
+% Normalize the values to be between 1 and 256
+vals(vals < crange(1)) = crange(1);
+vals(vals > crange(2)) = crange(2);
+valsN = round(((vals - crange(1)) ./ diff(crange)) .* 255)+1;
+% Convert any nans to ones
+valsN(isnan(valsN)) = 1;
+% Convert the normalized values to the RGB values of the colormap
+errColor = cmap(valsN, :);
+
 
 % Sub-sampling factor for vector field visualization
 ssf = 15;
 
 % View results
-figure
+figure('Position', [0 0 800 600], 'Units', 'pixels')
 
-subplot(1,3,1);
+subplot(2,2,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', S, ...
     'FaceColor', 'interp', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -241,11 +252,12 @@ quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
     plotU(1:ssf:end, 1), plotU(1:ssf:end, 2), plotU(1:ssf:end, 3), ...
     1, 'LineWidth', 2, 'Color', 'k' );
 hold off
+colorbar
 axis equal tight
 camlight
 title('The Scalar Field and its Gradient');
 
-subplot(1,3,2)
+subplot(2,2,2)
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
     'FaceColor', 'flat', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -255,11 +267,12 @@ set(gca, 'Clim', crange);
 axis equal tight
 title('The Spatial Distribution of Relative Error');
 
-subplot(1,3,3)
-histogram(relErr)
+subplot(2,2,3:4)
+histogram(relErr, linspace(0, 0.5, 50))
 xlim([0 0.5]);
 title('The Relative Error');
-saveas(gcf, './DEC_sphericalMesh_relativeError_gradient.jpg')
+saveas(gcf, fullfile('Tutorials', ...
+    'DEC_sphericalMesh_relativeError_gradient.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NGradS
 
@@ -306,7 +319,7 @@ valsN(isnan(valsN)) = 1;
 errColor = cmap(valsN, :);
 
 % View results
-figure
+figure('Position', [0 0 800 600], 'Units', 'pixels')
 
 subplot(2,2,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', lapS, ...
@@ -329,10 +342,11 @@ axis equal tight
 title('The Spatial Distribution Relative Error');
 
 subplot(2,2,3:4)
-histogram(relErr)
+histogram(relErr, linspace(0, 0.5, 50))
 xlim([0 0.5])
 title('The Relative Error');
-saveas(gcf, './DEC_sphericalMesh_relativeError_Laplacian.jpg')
+saveas(gcf, fullfile('Tutorials', ...
+    'DEC_sphericalMesh_relativeError_Laplacian.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NLapS normalizeAreas
  
@@ -393,7 +407,8 @@ axis equal
 caxis([0, maxC])
 colorbar
 sgtitle('Laplacian of tangential velocity field')
-saveas(gcf, './DEC_sphericalMesh_laplacian_tangentialVel.png')
+saveas(gcf, fullfile('Tutorials', ...
+    'DEC_sphericalMesh_laplacian_tangentialVel.png'))
 
 
 %% Test against sensitivity to projection and re-averaging onto vertices
@@ -431,7 +446,8 @@ caxis([0, 3.5])
 colorbar
 sgtitle('Laplacian of tangential velocity field after resolution')
 
-saveas(gcf, './DEC_sphericalMesh_laplacian_tangentialVel_reaveraged.png')
+saveas(gcf, fullfile('Tutorials', ...
+    'DEC_sphericalMesh_laplacian_tangentialVel_reaveraged.png'))
 
 %% Calculate the Divergence of a Tangent Vector Field =====================
 % The divergence calculated by the DEC does NOT match the classical FEM
@@ -464,14 +480,24 @@ fprintf('Median Relative Error = %f\n', median(relErr));
 plotU = normalizerow(U);
 
 % Colormap for the error
-crange = [min(relErr) 0.5];
-errColor = vals2colormap( relErr, 'parula', crange );
+crange = [0 0.5];
+vals = relErr ;
+% Generate the colormap
+cmap = parula(256);
+% Normalize the values to be between 1 and 256
+vals(vals < crange(1)) = crange(1);
+vals(vals > crange(2)) = crange(2);
+valsN = round(((vals - crange(1)) ./ diff(crange)) .* 255)+1;
+% Convert any nans to ones
+valsN(isnan(valsN)) = 1;
+% Convert the normalized values to the RGB values of the colormap
+errColor = cmap(valsN, :);
 
 % Sub-sampling factor for vector field visualization
 ssf = 15;
 
 % View results
-figure
+figure('Position', [0 0 800 600], 'Units', 'pixels')
 
 subplot(1,3,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', divU, ...
@@ -502,6 +528,8 @@ histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
 
+saveas(gcf, fullfile('Tutorials', ...
+    'DEC_sphericalMesh_divergence.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NDivU
 
@@ -536,17 +564,39 @@ fprintf('Median Relative Error = %f\n', median(relErr));
 plotU = normalizerow(U);
 
 % Colormap for the curl
-curlColor = vals2colormap( curlU, 'parula' );
+crange = [min(curlU) max(curlU)];
+vals = curlU ;
+% Generate the colormap
+cmap = parula(256);
+% Normalize the values to be between 1 and 256
+vals(vals < crange(1)) = crange(1);
+vals(vals > crange(2)) = crange(2);
+valsN = round(((vals - crange(1)) ./ diff(crange)) .* 255)+1;
+% Convert any nans to ones
+valsN(isnan(valsN)) = 1;
+% Convert the normalized values to the RGB values of the colormap
+curlColor = cmap(valsN, :);
 
 % Colormap for the error
-crange = [min(relErr) 0.5];
-errColor = vals2colormap( relErr, 'parula', crange );
+crange = [0 0.5];
+vals = relErr ;
+% Generate the colormap
+cmap = parula(256);
+% Normalize the values to be between 1 and 256
+vals(vals < crange(1)) = crange(1);
+vals(vals > crange(2)) = crange(2);
+valsN = round(((vals - crange(1)) ./ diff(crange)) .* 255)+1;
+% Convert any nans to ones
+valsN(isnan(valsN)) = 1;
+% Convert the normalized values to the RGB values of the colormap
+errColor = cmap(valsN, :);
+
 
 % Sub-sampling factor for vector field visualization
 ssf = 15;
 
 % View results
-figure
+figure('Position', [0 0 800 600], 'Units', 'pixels')
 
 subplot(1,3,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', curlColor, ...
@@ -577,6 +627,8 @@ histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
 
+saveas(gcf, fullfile('Tutorials', 'DEC_sphericalMesh_curl.png'))
+
 clear relErr rmsErr plotU crange errColor ssf NCurlU curlColor
 
 %% ************************************************************************
@@ -602,7 +654,7 @@ plotHU = normalizerow(harmU);
 % Sub-sampling factor for vector field visualization
 ssf = 15;
 
-figure
+figure('Position', [0 0 800 600], 'Units', 'pixels')
 
 % The full vector field ---------------------------------------------------
 UColors = sparse( F(:), repmat(1:size(F,1),1,3), ...
@@ -678,6 +730,9 @@ axis equal tight
 camlight
 title('The Harmonic Part and its Norm');
 colorbar
+
+saveas(gcf, fullfile('Tutorials', ...
+    'DEC_sphericalMesh_decomposition.png'))
 
 % clear ssf UColors HUColors plotU plotDivU plotRotU plotHU
 
