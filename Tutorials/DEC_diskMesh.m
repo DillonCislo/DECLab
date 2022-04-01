@@ -175,7 +175,6 @@ a31 = acos((s23.^2 + s12.^2 - s31.^2)./(2.*s23.*s12));
 a12 = acos((s31.^2 + s23.^2 - s12.^2)./(2.*s31.*s23));
 internal_angles = [a23 a31 a12];
 
-
 UColors = sparse( F(:), repmat(1:size(F,1),1,3), ...
     internal_angles, size(V,1), size(F,1) );
 UColors = UColors * U;

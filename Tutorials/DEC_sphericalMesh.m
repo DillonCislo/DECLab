@@ -19,6 +19,7 @@ cd(tutorialDir)
 
 load('testData.mat', 'sphericalTri')
 cd('..')
+addpath('mesh_handling')
 
 % Re-create the triangulation
 TR = sphericalTri;
@@ -407,6 +408,11 @@ axis equal
 caxis([0, maxC])
 colorbar
 sgtitle('Laplacian of tangential velocity field')
+
+subplot(2, 2, 4)
+histogram(vecnorm(Uvtx2 - Uvtx, 2, 2) ./ vecnorm(Uvtx, 2, 2))
+xlabel('relative difference $\delta / |U|$', 'interpreter', 'latex')
+
 saveas(gcf, fullfile('Tutorials', ...
     'DEC_sphericalMesh_laplacian_tangentialVel.png'))
 
@@ -477,7 +483,7 @@ fprintf('Max Relative Error = %f\n', max(relErr));
 fprintf('Median Relative Error = %f\n', median(relErr));
 
 % The vector field to plot
-plotU = normalizerow(U);
+plotU = U ./ vecnorm(U, 2, 2);
 
 % Colormap for the error
 crange = [0 0.5];
@@ -499,7 +505,7 @@ ssf = 15;
 % View results
 figure('Position', [0 0 800 600], 'Units', 'pixels')
 
-subplot(1,3,1);
+subplot(2,2,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', divU, ...
     'FaceColor', 'interp', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -513,7 +519,7 @@ axis equal tight
 camlight
 title('The Vector Field and its Divergence');
 
-subplot(1,3,2)
+subplot(2,2,2)
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
     'FaceColor', 'flat', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -523,7 +529,7 @@ set(gca, 'Clim', crange);
 axis equal tight
 title('The Spatial Distribution of Relative Error');
 
-subplot(1,3,3)
+subplot(2,2,3:4)
 histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
@@ -561,7 +567,7 @@ fprintf('Max Relative Error = %f\n', max(relErr));
 fprintf('Median Relative Error = %f\n', median(relErr));
 
 % The vector field to plot
-plotU = normalizerow(U);
+plotU = U ./ vecnorm(U, 2, 2);
 
 % Colormap for the curl
 crange = [min(curlU) max(curlU)];
@@ -596,9 +602,10 @@ errColor = cmap(valsN, :);
 ssf = 15;
 
 % View results
+close all
 figure('Position', [0 0 800 600], 'Units', 'pixels')
 
-subplot(1,3,1);
+subplot(2,2,1);
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', curlColor, ...
     'FaceColor', 'flat', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -612,7 +619,7 @@ axis equal tight
 camlight
 title('The Vector Field and its "Curl"');
 
-subplot(1,3,2)
+subplot(2,2,2)
 patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
     'FaceColor', 'flat', 'EdgeColor', 'none', ...
     'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
@@ -622,7 +629,7 @@ set(gca, 'Clim', crange);
 axis equal tight
 title('The Spatial Distribution of Relative Error');
 
-subplot(1,3,3)
+subplot(2,2,3:4)
 histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
@@ -646,19 +653,20 @@ clc;
     DEC.helmholtzHodgeDecomposition(U);
 
 % Normalize rows for plotting
-plotU = normalizerow(U);
-plotDivU = normalizerow(divU);
-plotRotU = normalizerow(rotU);
-plotHU = normalizerow(harmU);
+plotU = U ./ vecnorm(U, 2, 2);
+plotDivU = divU ./ vecnorm(divU, 2, 2);
+plotRotU = rotU ./ vecnorm(rotU, 2, 2);
+plotHU = harmU ./ vecnorm(harmU, 2, 2);
 
 % Sub-sampling factor for vector field visualization
 ssf = 15;
 
+close all
 figure('Position', [0 0 800 600], 'Units', 'pixels')
 
 % The full vector field ---------------------------------------------------
 UColors = sparse( F(:), repmat(1:size(F,1),1,3), ...
-    internalangles(V,F), size(V,1), size(F,1) );
+    internal_angles(V,F), size(V,1), size(F,1) );
 UColors = UColors * U;
 UColors = sqrt(sum(UColors.^2, 2));
 
@@ -690,7 +698,7 @@ quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
 hold off
 axis equal tight
 camlight
-title('The Irrotational (Curl-Free) Part and the Scalar Potential');
+title('Irrotational (Curl-Free) Part and Scalar Potential');
 colorbar
 
 % The divergence-free part ------------------------------------------------
@@ -706,12 +714,12 @@ quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
 hold off
 axis equal tight
 camlight
-title('The Rotational (Divergence-Free) Part and the Vector Potential');
+title('Rotational Part and Vector Potential');
 colorbar
 
 % The harmonic part -------------------------------------------------------
 HUColors = sparse( F(:), repmat(1:size(F,1),1,3), ...
-    internalangles(V,F), size(V,1), size(F,1) );
+    internal_angles(V,F), size(V,1), size(F,1) );
 HUColors = HUColors * harmU;
 HUColors = sqrt(sum(HUColors.^2, 2));
 
@@ -782,5 +790,5 @@ trueVectorP = sinTheta_F .* ( Cvector(2) + ...
 
 
 
-
+close all
 
