@@ -93,7 +93,9 @@ dphi = Ephi ./ sin(theta).^2;
 % Enter your favorite scalar field in Cartesian or spherical coordinates
 
 % S = 1 / (1 + (x + 1/sqrt(2))^2 + z^2 ); DIVERGENT LAPLACIAN AT THETA = 0
-S = (3/32) .* sqrt(77/pi) * sin(theta)^5 * cos(5*phi); % A spherical harmonic
+% S = (3/32) .* sqrt(77/pi) * sin(theta)^5 * cos(5*phi); % A spherical harmonic
+% S = 1+x+y.^2+x.^2.*y+x.^4+y.^5+(x.*y.*z).^2;
+S = cos(4*phi).*cos(theta).*sin(theta).^4-cos(theta).^2;
 
 %--------------------------------------------------------------------------
 
@@ -171,7 +173,6 @@ U = double(vpa(subs(U.', {theta, phi}, {NTheta, NPhi})));
 divU = double(vpa(subs(divU, {theta, phi}, {NTheta, NPhi})));
 curlU = double(vpa(subs(curlU, {theta, phi}, {NTheta, NPhi})));
 Uvtx = U ;
-
 
 % Average vector fields onto faces
 U = cat( 3, U(F(:,1), :), U(F(:,2), :), U(F(:,3), :) );
@@ -256,6 +257,7 @@ hold off
 colorbar
 axis equal tight
 camlight
+view(3);
 title('The Scalar Field and its Gradient');
 
 subplot(2,2,2)
@@ -266,6 +268,7 @@ patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
 colorbar
 set(gca, 'Clim', crange);
 axis equal tight
+view(3)
 title('The Spatial Distribution of Relative Error');
 
 subplot(2,2,3:4)
