@@ -25,6 +25,7 @@ addpath('mesh_handling')
 TR = sphericalTri;
 V = TR.Points;
 F = TR.ConnectivityList;
+FN = TR.faceNormal;
 
 % Edge connectivity list
 E = edges(TR);
@@ -43,7 +44,6 @@ Emp = ( V(E(:,2), :) + V(E(:,1),:) ) ./ 2;
 DEC = DiscreteExteriorCalculus( F, V );
 % profile viewer
 disp('initiated DEC')
-
 
 %--------------------------------------------------------------------------
 % View Results
@@ -80,6 +80,7 @@ N = R;
 % The metric tensor
 g = simplify( [ dot(Etheta, Etheta), dot(Etheta, Ephi); ...
     dot(Ephi, Etheta), dot(Ephi, Ephi) ] );
+gInv = simplify(inv(g));
 
 % The dual basis vectors
 dtheta = Etheta;
@@ -143,13 +144,37 @@ divU = simplify( gradient( sin(theta) * uTheta, theta ) / sin(theta) + ...
     gradient( uPhi, phi ) / sin(theta)^2 );
 
 % Calculate the 'curl' of the vector field
-% MIGHT NEED AN EXTRA-FACTOR OF THE AREA FORM
 curlU = simplify(...
     (gradient( uPhi, theta ) - gradient( uTheta, phi )) / sin(theta) );
 
-% Calculate the Laplacian of the vector field
-% IMPLEMENT THIS!!!!
+% Calculate the Laplacian of the vector field -----------------------------
 
+ % Exterior derivative of the associated 1-form field
+dU = (gradient(uPhi, theta)-gradient(uTheta, phi)) / sqrt(det(g));
+
+% d * d * U
+lapU1 = ...
+    gradient(sqrt(det(g)) * (uTheta * gInv(1,1) + uPhi * gInv(2,1)), theta) + ...
+    gradient(sqrt(det(g)) * (uTheta * gInv(1,2) + uPhi * gInv(2,2)), phi);
+lapU1 = simplify(lapU1 / sqrt(det(g)));
+lapU1 = gradient(lapU1, theta) * dtheta + gradient(lapU1, phi) * dphi;
+lapU1 = simplify(lapU1);
+
+%  * d * d U
+lapU2 = ...
+    (gradient(dU, theta) * gInv(1,2) + gradient(dU, phi) * gInv(2,2)) * dtheta - ...
+    (gradient(dU, theta) * gInv(1,1) + gradient(dU, phi) * gInv(2,1)) * dphi;
+lapU2 = simplify(-sqrt(det(g)) * lapU2);
+
+lapU = simplify(lapU1 + lapU2);
+
+% Covariant 1-form components in dual basis
+lapUTheta = simplify( dot(lapU, Etheta) ); 
+lapUPhi = simplify( dot(lapU, Ephi) );
+
+% Convert 1-form field to tangent vector field
+lapU = (gInv(1,1) * lapUTheta + gInv(1,2) * lapUPhi) * Etheta + ...
+    (gInv(2,1) * lapUTheta + gInv(2,2) * lapUPhi) * Ephi;
 
 %% Convert Symbolic Quantities to Numerical Quantities ====================
 
@@ -159,24 +184,82 @@ fprintf('Substituting numerical values for symbolic variables... ');
 NTheta = acos(V(:,3));
 NPhi = atan2(V(:,2), V(:,1));
 
-% Quantities associated with the scalar field
-S = double(vpa(subs(S, {theta, phi}, {NTheta, NPhi})));
-gradS = double(vpa(subs(gradS.', {theta, phi}, {NTheta, NPhi})));
-lapS = double(vpa(subs(lapS, {theta, phi}, {NTheta, NPhi})));
+% Quantities associated with the scalar field -----------------------------
+% S = double(vpa(subs(S, {theta, phi}, {NTheta, NPhi})));
+% gradS = double(vpa(subs(gradS.', {theta, phi}, {NTheta, NPhi})));
+% lapS = double(vpa(subs(lapS, {theta, phi}, {NTheta, NPhi})));
+
+S = matlabFunction(S, 'Vars', {theta, phi}); S = S(NTheta, NPhi);
+gradS = matlabFunction(gradS.', 'Vars', {theta, phi}); gradS = gradS(NTheta, NPhi);
+lapS = matlabFunction(lapS, 'Vars', {theta, phi}); lapS = lapS(NTheta, NPhi);
+
+% Account for numerical roundoff
+S(abs(S) < eps) = 0;
+gradS(abs(gradS) < eps) = 0;
+lapS(abs(lapS) < eps) = 0;
+
+% Account for any divisions by zero
+if any(isnan(S) | isinf(S))
+    warning('Replacing NaN/Inf in S');
+    S(isnan(S) | isinf(S)) = 0;
+end
+if any(isnan(gradS) | isinf(gradS))
+    warning('Replacing NaN/Inf in gradS');
+    gradS(isnan(gradS) | isinf(gradS)) = 0;
+end
+if any(isnan(lapS) | isinf(lapS))
+    warning('Replacing NaN/Inf in lapS');
+    lapS(isnan(lapS) | isinf(gradS)) = 0;
+end
 
 % Average vector fields onto faces
 gradS = cat(3, gradS(F(:,1), :), gradS(F(:,2), :), gradS(F(:,3), :) );
 gradS = mean( gradS, 3 );
+gradS = gradS - repmat(dot(gradS, FN, 2), 1, 3) .* FN;
 
-% Quantities associated with the vector field
-U = double(vpa(subs(U.', {theta, phi}, {NTheta, NPhi})));
-divU = double(vpa(subs(divU, {theta, phi}, {NTheta, NPhi})));
-curlU = double(vpa(subs(curlU, {theta, phi}, {NTheta, NPhi})));
-Uvtx = U ;
+% Quantities associated with the vector field -----------------------------
+% U = double(vpa(subs(U.', {theta, phi}, {NTheta, NPhi})));
+% divU = double(vpa(subs(divU, {theta, phi}, {NTheta, NPhi})));
+% curlU = double(vpa(subs(curlU, {theta, phi}, {NTheta, NPhi})));
+% lapU = double(vpa(subs(lapU.', {theta, phi}, {NTheta, NPhi})));
+
+U = matlabFunction(U.', 'Vars', {theta, phi}); U = U(NTheta, NPhi);
+divU = matlabFunction(divU, 'Vars', {theta, phi}); divU = divU(NTheta, NPhi);
+curlU = matlabFunction(curlU, 'Vars', {theta, phi}); curlU = curlU(NTheta, NPhi);
+lapU = matlabFunction(lapU.', 'Vars', {theta, phi}); lapU = lapU(NTheta, NPhi);
+
+% Account for numerical roundoff
+U(abs(U) < eps) = 0;
+divU(abs(divU) < eps) = 0;
+curlU(abs(curlU) < eps) = 0;
+lapU(abs(lapU) < eps) = 0;
+
+% Account for any divisions by zero
+if any(isnan(U) | isinf(U))
+    warning('Replacing NaN/Inf in U');
+    U(isnan(U) | isinf(U)) = 0;
+end
+if any(isnan(divU) | isinf(divU))
+    warning('Replacing NaN/Inf in divU');
+    divU(isnan(divU) | isinf(divU)) = 0;
+end
+if any(isnan(curlU) | isinf(curlU))
+    warning('Replacing NaN/Inf in curlU');
+    curlU(isnan(curlU) | isinf(curlU)) = 0;
+end
+if any(isnan(lapU) | isinf(lapU))
+    warning('Replacing NaN/Inf in lapU');
+    lapU(isnan(lapU) | isinf(gradU)) = 0;
+end
 
 % Average vector fields onto faces
 U = cat( 3, U(F(:,1), :), U(F(:,2), :), U(F(:,3), :) );
 U = mean( U, 3 );
+U = U - repmat(dot(U, FN, 2), 1, 3) .* FN;
+
+lapU = cat( 3, lapU(F(:,1), :), lapU(F(:,2), :), lapU(F(:,3), :) );
+lapU = mean( lapU, 3 );
+lapU = lapU - repmat(dot(lapU, FN, 2), 1, 3) .* FN;
 
 % Average primal 2-forms onto faces
 curlU = cat(2, curlU(F(:,1)), curlU(F(:,2)), curlU(F(:,3)) );
@@ -187,6 +270,7 @@ fprintf('Done\n');
 %% Clear Extraneous Variables =============================================
 
 clear R Etheta Ephi N g dtheta dphi Utheta Uphi uTheta uPhi NTheta NPhi
+clear dU lapU1 lapU2 gInv lapUTheta lapUPhi
 clear x y z theta phi
 
 %% ************************************************************************
@@ -199,7 +283,7 @@ clear x y z theta phi
 % The gradient calculated by DEC exactly matches the classical Finite
 % Element Method (FEM) gradient (see 'grad.m' from 'gptoolbox')
 
-clc;
+close all; clc;
 
 % The discrete gradient calculated by DEC
 NGradS = DEC.gradient(S);
@@ -275,8 +359,9 @@ subplot(2,2,3:4)
 histogram(relErr, linspace(0, 0.5, 50))
 xlim([0 0.5]);
 title('The Relative Error');
-saveas(gcf, fullfile('Tutorials', ...
-    'DEC_sphericalMesh_relativeError_gradient.png'))
+
+% saveas(gcf, fullfile('Tutorials', ...
+%     'DEC_sphericalMesh_relativeError_gradient.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NGradS
 
@@ -287,7 +372,7 @@ clear relErr rmsErr plotU crange errColor ssf NGradS
 % Eqn. (3.11) from "Polygon Mesh Processing" by Botsch et al.  The latter
 % formalism seems to be superior in so far as matching analytic results
 
-clc;
+close all; clc;
 
 normalizeAreas = true;
 NLapS = DEC.laplacian(S, normalizeAreas);
@@ -349,114 +434,126 @@ subplot(2,2,3:4)
 histogram(relErr, linspace(0, 0.5, 50))
 xlim([0 0.5])
 title('The Relative Error');
-saveas(gcf, fullfile('Tutorials', ...
-    'DEC_sphericalMesh_relativeError_Laplacian.png'))
+
+% saveas(gcf, fullfile('Tutorials', ...
+%     'DEC_sphericalMesh_relativeError_Laplacian.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NLapS normalizeAreas
- 
 
-%% Calculate the Laplacian of the vector field
-% addpath('/mnt/data/code/gut_matlab/mesh_handling/')
-% addpath('/mnt/data/code/gut_matlab/mesh_handling/meshDEC/')
 
-% Check that field is in fact tangential
-close all
-[v0n, v0t, facenormals] = ...
-    resolveTangentNormalVector(F, V, U) ;
-[V2F, F2V] = meshAveragingOperators(F, V) ;
-Uvtx2 = F2V * v0t ;
-% subplot(3, 1, 1)
-% histogram(vecnorm(Uvtx2 - Uvtx, 2, 2))
-% xlabel('difference $|U - U_t|$', 'interpreter', 'latex')
-subplot(2, 1, 1)
-histogram(vecnorm(Uvtx2 - Uvtx, 2, 2) ./ vecnorm(Uvtx, 2, 2))
-xlabel('relative difference $\delta / |U|$', 'interpreter', 'latex')
-subplot(2, 1, 2)
-plot(Uvtx(:), Uvtx(:) - Uvtx2(:), '.')
-xlabel('velocity field elements, $U$', 'interpreter', 'latex')
-ylabel('difference between $U$ and $U_t$', 'interpreter', 'latex')
-pause(1) ;
+%% Calculate the Laplacian of a Tangent Vector Field ======================
+% NOTE: This functionality is somewhat experimental. 
+%
+% We define the Laplace-de Rham operator for k-forms as (*d*d + d*d*) u.
+% For some reason the pathway (d * d * u) works for primal 1-forms, but
+% (* d * d u) does not. Conversely, (* d * d u) works for dual 1-forms, but
+% (d * d * u) does not. It is not immediately clear why, but it seems to be
+% linked to the application of the 'dd0' operator that transforms dual
+% 0-forms to dual 1-forms by exterior differentiation. Again, this is
+% strange since this operator is confirmed to have the same form as
+% multiple other sources/DEC packages.
+%
+% The Laplacian for a dual vector field U is calculated by
+% converting it to a primal 1-form up and calculating (d * d * up), then
+% converting U to a dual 1-form ud and calculating (* d * d ud), then
+% converting both quantities back to dual vector fields and adding them
+% together
+%
+% The results of this calculation are the least accurate relative to
+% analytic results of any of our DEC operators (~1% median error) and
+% appears to be highly mesh dependent. More work needs to be done to
+% diagnose why. Use at your own risk.
 
-lapu = DEC.laplacian(Uvtx) ;
-% clf
-% trisurf(triangulation(F, V), vecnorm(lapu, 2, 2), 'edgecolor', 'none')
-% hold on;
-% quiver3(V(:, 1), V(:, 2), V(:, 3), ...
-%     lapu(:, 1), lapu(:, 2), lapu(:, 3), 0)
-% axis equal
-normLu = dot(lapu, V, 2) ;
-perpLu = vecnorm(normLu .* V - lapu, 2, 2) ;
+close all; clc;
 
-maxC = max(vecnorm(lapu, 2, 2)) ;
+NLapU = DEC.laplacian(U);
 
-clf
-subplot(2, 2, 1)
-trisurf(triangulation(F, V), vecnorm(lapu, 2, 2), 'edgecolor', 'none')
-title('$|\nabla^2 v_t|$', 'interpreter', 'latex')
-axis equal
-caxis([0, maxC])
+% The relative error
+relErr = lapU - NLapU;
+relErr = sqrt(sum(relErr.^2, 2)) ./ sqrt(sum(lapU.^2, 2));
+
+% Account for division by 0
+relErr(isinf(relErr)) = 0;
+relErr(isnan(relErr)) = 0;
+
+% The RMS relative error
+rmsErr = sqrt( mean( relErr.^2 ) );
+
+fprintf('VECTOR LAPLACIAN ERROR MEASUREMENTS:\n')
+fprintf('RMS Relative Error = %f\n', rmsErr);
+fprintf('Max Relative Error = %f\n', max(relErr));
+fprintf('Median Relative Error = %f\n', median(relErr));
+
+% The vector field to plot
+plotLapU = lapU ./ vecnorm(lapU, 2, 2);
+plotNLapU = NLapU ./ vecnorm(NLapU, 2, 2);
+
+% Colormap for the error
+crange = [0 0.5];
+vals = relErr ;
+% Generate the colormap
+cmap = parula(256);
+% Normalize the values to be between 1 and 256
+vals(vals < crange(1)) = crange(1);
+vals(vals > crange(2)) = crange(2);
+valsN = round(((vals - crange(1)) ./ diff(crange)) .* 255)+1;
+% Convert any nans to ones
+valsN(isnan(valsN)) = 1;
+% Convert the normalized values to the RGB values of the colormap
+errColor = cmap(valsN, :);
+
+% Sub-sampling factor for vector field visualization
+ssf = 15;
+
+% View results
+figure('Position', [0 0 800 600], 'Units', 'pixels')
+
+subplot(2,2,1);
+patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', sqrt(sum(lapU.^2, 2)), ...
+    'FaceColor', 'flat', 'EdgeColor', 'none', ...
+    'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
+    'AmbientStrength', 0.8 );
+hold on
+quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
+    plotLapU(1:ssf:end, 1), plotLapU(1:ssf:end, 2), plotLapU(1:ssf:end, 3), ...
+    1, 'LineWidth', 2, 'Color', 'k' );
+hold off
+axis equal tight
+camlight
+title('The Analytic Vector Laplacian');
 colorbar
+set(gca, 'Clim', [0 3]);
 
-subplot(2, 2, 2)
-trisurf(triangulation(F, V), normLu, 'edgecolor', 'none')
-title('normal component of $\nabla^2 v_t$', 'interpreter', 'latex')
-axis equal
-caxis([0, maxC])
+subplot(2,2,2);
+patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', sqrt(sum(NLapU.^2, 2)), ...
+    'FaceColor', 'flat', 'EdgeColor', 'none', ...
+    'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
+    'AmbientStrength', 0.8 );
+hold on
+quiver3( COM(1:ssf:end, 1), COM(1:ssf:end, 2), COM(1:ssf:end, 3), ...
+    plotNLapU(1:ssf:end, 1), plotNLapU(1:ssf:end, 2), plotNLapU(1:ssf:end, 3), ...
+    1, 'LineWidth', 2, 'Color', 'k' );
+hold off
+axis equal tight
+camlight
+title('The Analytic Vector Laplacian');
 colorbar
+set(gca, 'Clim', [0 max(sqrt(sum(lapU.^2, 2)))] );
 
-subplot(2, 2, 3)
-trisurf(triangulation(F, V), perpLu, 'edgecolor', 'none')
-title('perp component of $\nabla^2 v_t$', 'interpreter', 'latex')
-axis equal
-caxis([0, maxC])
+subplot(2,2,3)
+patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
+    'FaceColor', 'flat', 'EdgeColor', 'none', ...
+    'SpecularStrength', 0.1, 'DiffuseStrength', 0.1, ...
+    'AmbientStrength', 0.8 );
 colorbar
-sgtitle('Laplacian of tangential velocity field')
+set(gca, 'Clim', crange);
+axis equal tight
+title('The Spatial Distribution of Relative Error');
 
-subplot(2, 2, 4)
-histogram(vecnorm(Uvtx2 - Uvtx, 2, 2) ./ vecnorm(Uvtx, 2, 2))
-xlabel('relative difference $\delta / |U|$', 'interpreter', 'latex')
-
-saveas(gcf, fullfile('Tutorials', ...
-    'DEC_sphericalMesh_laplacian_tangentialVel.png'))
-
-
-%% Test against sensitivity to projection and re-averaging onto vertices
-close all
-lapu = DEC.laplacian(Uvtx2) ;
-clf
-trisurf(triangulation(F, V), vecnorm(lapu, 2, 2), 'edgecolor', 'none')
-hold on;
-quiver3(V(:, 1), V(:, 2), V(:, 3), ...
-    lapu(:, 1), lapu(:, 2), lapu(:, 3), 0)
-axis equal
-normLu = dot(lapu, V, 2) ;
-perpLu = vecnorm(normLu .* V - lapu, 2, 2) ;
-
-clf
-subplot(2, 2, 1)
-trisurf(triangulation(F, V), vecnorm(lapu, 2, 2), 'edgecolor', 'none')
-title('$|\nabla^2 v_t|$', 'interpreter', 'latex')
-axis equal
-caxis([0, 3.5])
-colorbar
-
-subplot(2, 2, 2)
-trisurf(triangulation(F, V), normLu, 'edgecolor', 'none')
-title('normal component of $\nabla^2 v_t$', 'interpreter', 'latex')
-axis equal
-caxis([0, 3.5])
-colorbar
-
-subplot(2, 2, 3)
-trisurf(triangulation(F, V), perpLu, 'edgecolor', 'none')
-title('perp component of $\nabla^2 v_t$', 'interpreter', 'latex')
-axis equal
-caxis([0, 3.5])
-colorbar
-sgtitle('Laplacian of tangential velocity field after resolution')
-
-saveas(gcf, fullfile('Tutorials', ...
-    'DEC_sphericalMesh_laplacian_tangentialVel_reaveraged.png'))
+subplot(2,2,4)
+histogram(relErr(relErr <= 1))
+xlim([0 1])
+title('The Relative Error');
 
 %% Calculate the Divergence of a Tangent Vector Field =====================
 % The divergence calculated by the DEC does NOT match the classical FEM
@@ -465,7 +562,7 @@ saveas(gcf, fullfile('Tutorials', ...
 % weights), HOWEVER it does seem to perform significantly better than the
 % FEM divergence in so far as matching analytic results!
 
-clc;
+close all; clc;
 
 NDivU = DEC.divergence(U);
 
@@ -537,8 +634,8 @@ histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
 
-saveas(gcf, fullfile('Tutorials', ...
-    'DEC_sphericalMesh_divergence.png'))
+% saveas(gcf, fullfile('Tutorials', ...
+%     'DEC_sphericalMesh_divergence.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NDivU
 
@@ -549,7 +646,7 @@ clear relErr rmsErr plotU crange errColor ssf NDivU
 % FEM-style measurement of circulation on a hinge or vertex-stencil, but
 % these results seem convincing enough me without such a comparison.
 
-clc;
+close all; clc;
 
 NCurlU = DEC.curl(U);
 
@@ -637,7 +734,7 @@ histogram(relErr)
 xlim([0 0.5])
 title('The Relative Error');
 
-saveas(gcf, fullfile('Tutorials', 'DEC_sphericalMesh_curl.png'))
+% saveas(gcf, fullfile('Tutorials', 'DEC_sphericalMesh_curl.png'))
 
 clear relErr rmsErr plotU crange errColor ssf NCurlU curlColor
 
@@ -649,7 +746,7 @@ clear relErr rmsErr plotU crange errColor ssf NCurlU curlColor
 
 %% Perform Decomposition ==================================================
 
-clc;
+close all; clc;
 
 % Perform Helmholtz-Hodge decomposition
 [divU, rotU, harmU, scalarP, vectorP] = ...
@@ -742,10 +839,10 @@ camlight
 title('The Harmonic Part and its Norm');
 colorbar
 
-saveas(gcf, fullfile('Tutorials', ...
-    'DEC_sphericalMesh_decomposition.png'))
+% saveas(gcf, fullfile('Tutorials', ...
+%     'DEC_sphericalMesh_decomposition.png'))
 
-% clear ssf UColors HUColors plotU plotDivU plotRotU plotHU
+clear ssf UColors HUColors plotU plotDivU plotRotU plotHU
 
 %% CALCULATE ANALYIC RESULTS ==============================================
 % NOTE: This section is only usable with the single supplied vector field.
@@ -790,8 +887,6 @@ Cvector = A \b;
 
 trueVectorP = sinTheta_F .* ( Cvector(2) + ...
     Cvector(1) .* log(tanTheta2_F) ) + b1;
-
-
 
 close all
 

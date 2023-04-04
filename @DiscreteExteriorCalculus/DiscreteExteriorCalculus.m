@@ -23,19 +23,19 @@ classdef DiscreteExteriorCalculus < handle
         % #Ex1 edge connectivity list of the input triangulation
         E
         
-        % #Vx#E exterior derivative operator mapping primal 0-forms to
+        % #Ex#V exterior derivative operator mapping primal 0-forms to
         % primal 1-forms
         d0
         
-        % #Ex#F exterior derivative operator mapping primal 1-forms to
+        % #Fx#E exterior derivative operator mapping primal 1-forms to
         % primal 2-forms
         d1
         
-        % #Fx#E exterior derivative operator mapping dual 0-forms to dual
+        % #Ex#F exterior derivative operator mapping dual 0-forms to dual
         % 1-forms
         dd0
         
-        % #Ex#V exterior derivative operator mapping dual 1-forms to dual
+        % #Vx#E exterior derivative operator mapping dual 1-forms to dual
         % 2-forms
         dd1
         
@@ -227,6 +227,11 @@ classdef DiscreteExteriorCalculus < handle
             % Re-shape to appropriate output dimensions
             USharp = reshape( USharp, size(this.F, 1), size(this.V, 2) );
             
+            % Project the vector field onto the tangent space of its
+            % respective face ---------------------------------------------
+            FN = faceNormal(triangulation(this.F, this.V));
+            USharp = USharp - repmat(dot(USharp, FN, 2), 1, 3) .* FN;
+            
         end
         
         function USharp = dual1FormToDualVector(this, U)
@@ -256,6 +261,11 @@ classdef DiscreteExteriorCalculus < handle
             % Re-shape to appropriate output dimensions
             USharp = reshape( USharp, size(this.F, 1), size(this.V, 2) );
             
+            % Project the vector field onto the tangent space of its
+            % respective face ---------------------------------------------
+            FN = faceNormal(triangulation(this.F, this.V));
+            USharp = USharp - repmat(dot(USharp, FN, 2), 1, 3) .* FN;
+            
         end
         
         function gradS = gradient(this, S)
@@ -279,10 +289,7 @@ classdef DiscreteExteriorCalculus < handle
             if (size(S, 2) ~= 1), S = S.'; end
             
             % Calculate gradient ------------------------------------------
-            gradS = this.sharpPD * this.d0 * S;
-            
-            % Re-shape to appropriate output dimensions
-            gradS = reshape( gradS, size(this.F, 1), size(this.V, 2) );
+            gradS = this.primal1FormToDualVector(this.d0 * S);
             
         end
         
@@ -560,7 +567,8 @@ classdef DiscreteExteriorCalculus < handle
             %       - U:        #Vx1 primal 0-form OR
             %                   #Vx3 primal tangent vector field OR
             %                   #Fx3 dual tangent vector field OR
-            %                   #Ex1 primal 1-form
+            %                   #Ex1 primal 1-form OR
+            %                   #Fx1 primal 2-form
             %
             %       - normalizeAreas:   A boolean. If true the Laplacian
             %       operator will be normalized by the area of dual
@@ -584,7 +592,16 @@ classdef DiscreteExteriorCalculus < handle
             
             if size(U, 1) == size(this.V, 1)
                 
-                inputType = '0form';
+                if isvector(U)
+                    
+                    inputType = '0form';
+                    
+                else
+                    
+                    error(['This method cannot handle primal tangent ' ...
+                        'vector inputs yet']);
+                    
+                end
             
             elseif ~isvector(U)
                 
@@ -594,19 +611,23 @@ classdef DiscreteExteriorCalculus < handle
                     (size(U, 2) == size(this.V, 2)), ...
                     'Input dual vector field is improperly sized!');
                 
-                U = this.dualVectorToPrimal1Form(U);
-                
                 inputType = 'dualVector';
                 
             else
                 
                 if numel(U) == size(this.E, 1)
                     
+                    error(['Direct 1-form handling not yet ' ...
+                        'implemented for this method']);
                     inputType = '1form';
                     
                 elseif numel(U) == size(this.V, 1)
                     
                     inputType = '0form';
+                    
+                elseif numel(U) == size(this.F, 1)
+                    
+                    inputType = '2form';
                     
                 else
                     
@@ -628,21 +649,47 @@ classdef DiscreteExteriorCalculus < handle
                 case '0form'
                     
                     if normalizeAreas
+                        
                         % lapU = inv(this.hd0) * this.dd1 * ...
                         %     this.hd1 * this.d0 * U;
                         lapU = this.hdd2 * this.dd1 * ...
                             this.hd1 * this.d0 * U;
                     else
+                        
                         lapU = this.dd1 * this.hd1 * this.d0 * U;
+                        
                     end
                     
                 case '1form'
                     
-                    lapU = [];
+                    error(['Direct 1-form handling not yet ' ...
+                        'implemented for this method']);
+                    
+                    % Primal route (d * d * u works, but * d * d u does not)
+                    % lapU = ( this.hdd1 * this.dd0 * this.hd2 * this.d1 + ...
+                    %     this.d0 * this.hdd2 * this.dd1 * this.hd1 ) * U;
+                    
+                    % Dual route (* d * d u works, but d * d * u does not)
+                    lapU = ( this.hd1 * this.d0 * this.hdd2 * this.dd1 + ...
+                        this.dd0 * this.hd2 * this.d1 * this.hdd1 ) * U;
                     
                 case 'dualVector'
                     
-                    lapU = [];
+                    % d * d * u
+                    lapU1 = this.dualVectorToPrimal1Form(U);
+                    lapU1 = this.d0 * this.hdd2 * this.dd1 * this.hd1 * lapU1;
+                    lapU1 = this.primal1FormToDualVector(lapU1);
+                    
+                    % * d * d u
+                    lapU2 = this.dualVectorToDual1Form(U);
+                    lapU2 = this.hd1 * this.d0 * this.hdd2 * this.dd1 * lapU2;
+                    lapU2 = this.dual1FormToDualVector(lapU2);
+                    
+                    lapU = lapU1 + lapU2;
+                    
+                case '2form'
+                    
+                    lapU = this.d1 * this.hdd1 * this.dd0 * this.hd2 * U;
                     
             end
             

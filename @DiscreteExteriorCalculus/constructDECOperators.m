@@ -230,7 +230,7 @@ this.flatDD = sparse(I, J, Q, numE, 3*numF);
 % As best I can tell the choice of sharp operator seems to be a little
 % ad-hoc.  Here, the sharp operator is basically just an evaluation of a
 % continuous 1-form interpolant at each facet centroid.  This choice was
-% made so that the gradient operator on primal 0-forms ( sharpDP * d0 )
+% made so that the gradient operator on primal 0-forms ( sharpPD * d0 )
 % matches exactly the classical FEM gradient operator
 %
 % The interpolation of the 1-forms is performed using the 'Whitney forms'.
