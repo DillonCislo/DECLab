@@ -461,7 +461,7 @@ classdef DiscreteExteriorCalculus < handle
         end
         
         function [ divU, rotU, harmU, scalarP, vectorP ] = ...
-                helmholtzHodgeDecomposition(this, U)
+                helmholtzHodgeDecomposition(this, U, r)
             %HELMHOLTZHODGEDECOMPOSITION Calculate the Helmholtz-Hodge
             %decomposition of a tangent dual vector field or a primal
             %1-form.
@@ -470,6 +470,10 @@ classdef DiscreteExteriorCalculus < handle
             %
             %       - U:        #FxD dual vector field OR
             %                   #Ex1 primal 1-form
+            %
+            %       - r:        Small number used for Tikhonov
+            %                   regularization of the symmetric Laplace
+            %                   operators prior to linear solves
             %
             %   OUTPUT PARAMETERS:
             %
@@ -489,6 +493,10 @@ classdef DiscreteExteriorCalculus < handle
             % Input Processing --------------------------------------------
             validateattributes( U, {'numeric'}, ...
                 {'2d', 'finite', 'real', 'nonnan'} );
+            
+            if (nargin < 3), r = 0; end
+            validateattributes( r, {'numeric'}, ...
+                {'scalar', 'nonnegative', 'finite', 'real', 'nonnan'});
             
             if ~isvector(U)
                 
@@ -517,12 +525,15 @@ classdef DiscreteExteriorCalculus < handle
             
             % Peform the decomposition ------------------------------------
             
-            % Calculate the scalar potential
-            scalarP = ( this.dd1 * this.hd1 * this.d0 ) \ ...
-                ( this.dd1 * this.hd1 * U );
+            % Calculate the scalar potential. Use of double negatives here
+            % makes the operators symmetric positive semi-definite
+            LS = -this.dd1 * this.hd1 * this.d0;
+            if (r > 0), LS = LS + r * speye(size(LS)); end
+            scalarP = LS \ ( -this.dd1 * this.hd1 * U );
             divU = this.d0 * scalarP;
             
-            % Calculate the vector potential
+            % Calculate the vector potential. Use of double negatives here
+            % makes the operators symmetric positive semi-definite
             % (MINUS SIGNS SHOULD NOW BE ACCOUNTED FOR)
             
             % OLD WAY: 'rotU' was the same, but 'vectorP' was off by a
@@ -533,8 +544,9 @@ classdef DiscreteExteriorCalculus < handle
             % rotU = inv(this.hd1) * this.dd0 * this.hd2 * vectorP;
             
             % NEW WAY
-            vectorP = ( this.d1 * this.hdd1 * this.dd0 ) \ ...
-                ( this.d1 * U );
+            LV = -this.d1 * this.hdd1 * this.dd0;
+            if (r > 0), LV = LV + r * speye(size(LV)); end
+            vectorP = LV \ (-this.d1 * U );
             vectorP = this.hdd0 * vectorP;
             rotU = this.hdd1 * this.dd0 * this.hd2 * vectorP;
             

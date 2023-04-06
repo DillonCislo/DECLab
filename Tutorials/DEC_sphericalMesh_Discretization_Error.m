@@ -506,3 +506,70 @@ ylabel('Median Fractional Error in \nabla^2 U');
 
 clear i sphereTri F V NTheta NPhi anaU anaLapU DEC NLapU relErr
 clear triVertexNum numFaces allRelErr allMedErr allRMSErr
+
+%% Calculate the Harmonic Component of a Tangential Velocity Field ========
+% The only harmonic 1-form field on a sphere is the trivial 0-field.
+% The norm of the calculated harmonic component should be tiny compared to
+% the full norm of the velocity field (deviations from zero are due to
+% discretization error);
+
+close all; clc;
+
+triVertexNum = 2.^(5:14);
+numFaces = zeros(size(triVertexNum));
+allRelErr = cell(numel(triVertexNum), 1);
+
+for i = 1:numel(triVertexNum)
+    
+    fprintf('Processing surface %d/%d... ', i, numel(triVertexNum));
+    
+    % Produce the new triangulation
+    sphereTri = sphereTriangulationVogel(triVertexNum(i));
+    F = sphereTri.ConnectivityList;
+    V = sphereTri.Points;
+    FN = sphereTri.faceNormal;
+    
+    numFaces(i) = size(F,1); % Number of faces in the current triangulation
+    
+    % Evaluate analytic values on current triangulation -------------------
+    
+    % (theta, phi) for each vertex
+    NTheta = acos(V(:,3));
+    NPhi = atan2(V(:,2), V(:,1));
+    
+    anaU = matlabFunction(U.', 'Vars', {theta, phi});
+    anaU = anaU(NTheta, NPhi);
+    
+    % Average vector fields onto faces
+    anaU = cat(3, anaU(F(:,1), :), anaU(F(:,2), :), ...
+        anaU(F(:,3), :) );
+    anaU = mean( anaU, 3 );
+    anaU = anaU - repmat(dot(anaU, FN, 2), 1, 3) .* FN;
+    
+    % Perform DEC analysis ------------------------------------------------
+    
+    DEC = DiscreteExteriorCalculus( F, V );
+    % Perform Helmholtz-Hodge decomposition
+    [~, ~, NHarmU, ~, ~] = DEC.helmholtzHodgeDecomposition(anaU, 1e-8);
+    
+    % The relative error
+    relErr = sqrt(sum(NHarmU.^2, 2)) ./ sqrt(sum(anaU.^2, 2));
+    
+    % Account for division by 0
+    relErr(isinf(relErr)) = 0;
+    relErr(isnan(relErr)) = 0;
+    
+    allRelErr{i} = relErr;
+    
+    fprintf('Done\n');
+    
+end
+
+allMedErr = cellfun(@median, allRelErr, 'Uni', true);
+plot(numFaces, allMedErr, '-ob', 'LineWidth', 2, 'MarkerFaceColor', 'b');
+set(gca, 'XScale', 'log');
+xlabel('Number of Mesh Faces');
+ylabel(sprintf('Median Fractional Error \nin Harmonic Component of U'));
+
+clear i sphereTri F V NTheta NPhi anaU DEC NHarmU relErr
+clear triVertexNum numFaces allRelErr allMedErr allRMSErr

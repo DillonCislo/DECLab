@@ -745,12 +745,16 @@ clear relErr rmsErr plotU crange errColor ssf NCurlU curlColor
 % *************************************************************************
 
 %% Perform Decomposition ==================================================
+% The only harmonic 1-form field on a sphere is the trivial 0-field.
+% The norm of the calculated harmonic component should be tiny compared to
+% the full norm of the velocity field (deviations from zero are due to
+% discretization error);
 
 close all; clc;
 
 % Perform Helmholtz-Hodge decomposition
 [divU, rotU, harmU, scalarP, vectorP] = ...
-    DEC.helmholtzHodgeDecomposition(U);
+    DEC.helmholtzHodgeDecomposition(U, 1e-8);
 
 % Normalize rows for plotting
 plotU = U ./ vecnorm(U, 2, 2);
