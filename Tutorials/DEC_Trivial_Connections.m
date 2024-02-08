@@ -12,6 +12,7 @@ cd(tutorialDir)
 addpath('..');
 addpath('../mesh_handling')
 
+
 %% Spherical Mesh Example =================================================
 clear; close all; clc;
 
@@ -33,7 +34,8 @@ DEC = DiscreteExteriorCalculus(F, V);
 % defectIDx = knnsearch(V, [0 0 1; sqrt(2)/3 0 -0.5; -sqrt(2)/3 0 -0.5]);
 % defectCharge = [1, -1, 2];
 
-defectIDx = knnsearch(V, [0 0 1; sqrt(2)/3 0 -0.5; -sqrt(2)/3 0 -0.5]);
+defectIDx = randsample(1:size(V,1), 3);
+% defectIDx = knnsearch(V, [0 0 1; sqrt(2)/3 0 -0.5; -sqrt(2)/3 0 -0.5]);
 defectCharge = [0.5, -0.5, 2];
 
 % Compute the trivial connection
