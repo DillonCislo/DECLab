@@ -341,7 +341,7 @@ hold off
 colorbar
 axis equal tight
 camlight
-view(3);
+% view(3);
 title('The Scalar Field and its Gradient');
 
 subplot(2,2,2)
@@ -352,7 +352,7 @@ patch( 'Faces', F, 'Vertices', V, 'FaceVertexCData', errColor, ...
 colorbar
 set(gca, 'Clim', crange);
 axis equal tight
-view(3)
+% view(3)
 title('The Spatial Distribution of Relative Error');
 
 subplot(2,2,3:4)

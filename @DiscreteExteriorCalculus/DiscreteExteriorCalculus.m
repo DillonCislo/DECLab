@@ -23,6 +23,11 @@ classdef DiscreteExteriorCalculus < handle
         % #Ex1 edge connectivity list of the input triangulation
         E
         
+        % #Bx1 cell array. Each entry is a #BVx1 column vector holding an
+        % ordered list of vertex IDs corresponding to a unique mesh
+        % boundary component
+        allBdys
+        
         % #Ex#V exterior derivative operator mapping primal 0-forms to
         % primal 1-forms
         d0
@@ -111,6 +116,7 @@ classdef DiscreteExteriorCalculus < handle
             this.F = F;
             this.V = V;
             this.E = sort(edges( triangulation(F, V) ), 2);
+            this.allBdys = this.computeBoundaries(F);
             
             % Construct DEC Operators -------------------------------------
             this.constructDECOperators();
@@ -707,7 +713,7 @@ classdef DiscreteExteriorCalculus < handle
             
         end
         
-        function Fnew = CCWOrientFaces(this, F, V)
+        function Fnew = CCWOrientFaces(~, F, V)
             %CCWORIENTFACES Re-orders the face connectivty list of an input
             %mesh triangulation so that all faces are counter-clockwise
             %ordered in the plane of the face
@@ -772,6 +778,49 @@ classdef DiscreteExteriorCalculus < handle
                 
             end
             
+        end
+        
+        function K = discreteGaussianCurvature(this)
+            % DISCRETEGAUSSIANCURVATURE Computes the discrete Gaussian
+            % curvature of the input mesh according to (9) in "Discrete
+            % Differential-Geometry Operators for Triangulated 2-Manifolds"
+            % [Meyer et al. 02] but without the inverse area term. This is
+            % the quantity that respects the discrete Gauss-Bonnet theorem
+            % with respect tothe mesh Euler characteristic:
+            %
+            %   K_G(x_i) = (2π - ∑θj) for interior vertices
+            %   K_G(x_i) = (π - ∑θj) for boundary vertices
+            %
+            %   OUTPUT PARAMETERS:
+            %
+            %       - K:    #Vx1 list of discrete Gaussian curvatures
+            
+            % Compute the lengths of the edges in each face
+            s23 = this.V(this.F(:,3), :) - this.V(this.F(:,2), :);
+            s23 = sqrt(sum(s23.^2, 2));
+            
+            s31 = this.V(this.F(:,1), :) - this.V(this.F(:,3), :);
+            s31 = sqrt(sum(s31.^2, 2));
+            
+            s12 = this.V(this.F(:,2), :) - this.V(this.F(:,1), :);
+            s12 = sqrt(sum(s12.^2, 2));
+            
+            % Compute the interior angles in each face
+            a23 = acos((s12.^2 + s31.^2 - s23.^2)./(2.*s12.*s31));
+            a31 = acos((s23.^2 + s12.^2 - s31.^2)./(2.*s23.*s12));
+            a12 = acos((s31.^2 + s23.^2 - s12.^2)./(2.*s31.*s23));
+            intAngles = [a23 a31 a12];
+
+            % Compute the Gaussian curvature
+            K = 2 * pi - accumarray( this.F(:), intAngles(:), ...
+                [size(this.V,1) 1], [], 0);
+            
+            % Handle boundary values
+            if ~isempty(this.allBdys)
+                allBdyIDx = unique(cell2mat(this.allBdys));
+                K(allBdyIDx) = K(allBdyIDx) - pi;
+            end
+
         end
 
     end
