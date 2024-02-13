@@ -105,31 +105,57 @@ R = sqrt( ((l1+l2-l3) .* (l3+l1-l2) .* (l2+l3-l1)) ./ (l1+l2+l3) ) ./ 2;
 
 % Reformat this data to feed into the plotting functions
 smallDist = 1e-3;
-a = COM + R .* X + smallDist * FN;
-b = COM - R .* X + smallDist * FN;
+if is2D
+    a = COM + R .* X;
+    b = COM - R .* X;
+else
+    a = COM + R .* X + smallDist * FN;
+    b = COM - R .* X + smallDist * FN;
+end
 
 %--------------------------------------------------------------------------
 % Generate Visualization
 %--------------------------------------------------------------------------
 
-fig = figure('Color', 'w');
+if isempty(findall(0, 'Type', 'figure'))
+    fig = figure('Color', 'w');
+else
+    fig = gcf;
+end
 
-trisurf(triangulation(F,V), patchOptions{:});
-
-hold on
-
-plot3([a(:,1).'; b(:,1).'], [a(:,2).'; b(:,2).'], ...
-    [a(:,3).'; b(:,3).'],  plotOptions{:} );
-
-scatter3(V(defectIDx, 1), V(defectIDx, 2), V(defectIDx, 3), ...
-    scatterOptions{:} );
-
-hold off
+if is2D
+    
+    patch('Faces', F, 'Vertices', V, patchOptions{:});
+    
+    hold on
+    
+    plot([a(:,1).'; b(:,1).'], [a(:,2).'; b(:,2).'], plotOptions{:} );
+    
+    scatter(V(defectIDx, 1), V(defectIDx, 2), scatterOptions{:} );
+    
+    hold off
+    
+    view(0, 90);
+    
+else
+    
+    trisurf(triangulation(F,V), patchOptions{:});
+    
+    hold on
+    
+    plot3([a(:,1).'; b(:,1).'], [a(:,2).'; b(:,2).'], ...
+        [a(:,3).'; b(:,3).'],  plotOptions{:} );
+    
+    scatter3(V(defectIDx, 1), V(defectIDx, 2), V(defectIDx, 3), ...
+        scatterOptions{:} );
+    
+    hold off
+    
+    cameratoolbar('SetMode', 'orbit');
+    
+end
 
 axis equal off
-cameratoolbar('SetMode', 'orbit');
-
-if is2D, view(0, 90); end
 
 end
 

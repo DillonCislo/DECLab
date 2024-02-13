@@ -10,7 +10,8 @@
 [tutorialDir, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(tutorialDir)
 addpath('..');
-addpath('../mesh_handling')
+addpath('../mesh_handling');
+addpath('../PlottingFunctions');
 
 
 %% Spherical Mesh Example =================================================
@@ -75,6 +76,6 @@ U = DEC.generateDirectionField(x);
 % U = DEC.helmholtzHodgeDecomposition(U, 1e-8);
 
 % Plot results
-plotDirectionField(F, V, U, defectIDx);
-view([0, 90]);
+plotDirectionField(F, V(:, 1:2), U(:, 1:2), defectIDx);
+% view([0, 90]);
 
