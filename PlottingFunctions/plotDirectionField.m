@@ -1,5 +1,5 @@
 function fig = plotDirectionField(F, V, X, defectIDx, ...
-    patchOptions, plotOptions, scatterOptions)
+    patchOptions, plotOptions, scatterOptions, visFIDx)
 %PLOTDIRECTIONFIELD Plots a tangent direction field on a mesh. Also plots
 %singular vertices. Primarily intended to quickly view the results of the
 %'computeTrivialConnection' method
@@ -25,6 +25,9 @@ function fig = plotDirectionField(F, V, X, defectIDx, ...
 %
 %       - scatterOptions:   A cell array holding the (name, value)-pair
 %                           options used to plot the singularities
+%
+%       - visFIDx:          #VFx1 vector of face IDs on which to view the
+%                           direction field (default is all faces)
 %
 %   OUTPUT PARAMETERS:
 %
@@ -71,11 +74,15 @@ end
 
 if (nargin < 5)
     patchOptions = {'FaceColor',  0.9 * ones(1,3)};
+elseif isempty(patchOptions)
+    patchOptions = {'FaceColor',  0.9 * ones(1,3)};
 else
     assert(iscell(patchOptions), 'Patch options must be a cell array');
 end
 
 if (nargin < 6)
+    plotOptions = {'Color', [0 0 1], 'LineWidth', 2};
+elseif isempty(plotOptions)
     plotOptions = {'Color', [0 0 1], 'LineWidth', 2};
 else
     assert(iscell(plotOptions), 'Line plot options must be a cell array');
@@ -83,9 +90,21 @@ end
 
 if (nargin < 7)
     scatterOptions = {'MarkerFaceColor', 'r', 'SizeData', 40};
+elseif isempty(scatterOptions)
+    scatterOptions = {'MarkerFaceColor', 'r', 'SizeData', 40};
 else
     assert(iscell(scatterOptions), ...
         'Scatter plot options must be a cell array');
+end
+
+if (nargin < 8)
+    visFIDx = (1:size(F,1)).';
+elseif isempty(visFIDx)
+    visFIDx = (1:size(F,1)).';
+else
+    validateattributes(visFIDx, {'numeric'}, {'vector', ...
+        'integer', 'positive', 'finite', 'real', '<=', size(F,1)});
+    if (size(visFIDx,2) ~= 1), visFIDx = visFIDx.'; end
 end
 
 TR = triangulation(F, V);
@@ -129,7 +148,8 @@ if is2D
     
     hold on
     
-    plot([a(:,1).'; b(:,1).'], [a(:,2).'; b(:,2).'], plotOptions{:} );
+    plot([a(visFIDx, 1).'; b(visFIDx, 1).'], ...
+        [a(visFIDx, 2).'; b(visFIDx, 2).'], plotOptions{:} );
     
     scatter(V(defectIDx, 1), V(defectIDx, 2), scatterOptions{:} );
     
@@ -143,8 +163,9 @@ else
     
     hold on
     
-    plot3([a(:,1).'; b(:,1).'], [a(:,2).'; b(:,2).'], ...
-        [a(:,3).'; b(:,3).'],  plotOptions{:} );
+    plot3([a(visFIDx, 1).'; b(visFIDx, 1).'], ...
+        [a(visFIDx, 2).'; b(visFIDx, 2).'], ...
+        [a(visFIDx, 3).'; b(visFIDx, 3).'],  plotOptions{:} );
     
     scatter3(V(defectIDx, 1), V(defectIDx, 2), V(defectIDx, 3), ...
         scatterOptions{:} );
